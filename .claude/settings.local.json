@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:infisical.com)",
+      "WebFetch(domain:sam-lau.com)",
+      "WebFetch(domain:adnanrafiq.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.nuget.org)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln add:*)",
+      "Bash(dotnet add:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(dotnet build:*)",
+      "Bash(timeout 5 dotnet run:*)",
+      "Bash(gtimeout:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
+    ]
+  }
+}
