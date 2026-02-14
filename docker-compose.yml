@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    depends_on:
+      - seq
+    environment:
+      - Infisical__ClientId=${INFISICAL_CLIENT_ID}
+      - Infisical__ClientSecret=${INFISICAL_CLIENT_SECRET}
+      - Infisical__ProjectId=${INFISICAL_PROJECT_ID}
+      - Infisical__Environment=${INFISICAL_ENVIRONMENT:-dev}
+      - Infisical__SiteUrl=${INFISICAL_SITE_URL:-https://app.infisical.com}
+      - Serilog__WriteTo__1__Args__serverUrl=http://seq:5341
+
+  seq:
+    image: datalust/seq:latest
+    ports:
+      - "5341:80"
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq-data:/data
+
+volumes:
+  seq-data:
