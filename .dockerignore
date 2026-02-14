@@ -1,0 +1,11 @@
+.git
+.vs
+.idea
+.claude
+bin
+obj
+docs
+*.md
+.env
+.editorconfig
+seq-data

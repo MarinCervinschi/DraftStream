@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DraftStream.Domain\DraftStream.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
