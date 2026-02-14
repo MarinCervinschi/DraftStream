@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DraftStream.Application\DraftStream.Application.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DraftStream.Application\DraftStream.Application.csproj" />
+    <ProjectReference Include="..\DraftStream.Application.Notes\DraftStream.Application.Notes.csproj" />
+    <ProjectReference Include="..\DraftStream.Application.Tasks\DraftStream.Application.Tasks.csproj" />
+    <ProjectReference Include="..\DraftStream.Application.Snippets\DraftStream.Application.Snippets.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Infisical.Sdk" Version="3.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>
