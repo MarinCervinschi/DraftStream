@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DraftStream is a .NET 8+ AI agent that captures notes, tasks, and code snippets from Telegram and stores them in Notion databases. It uses OpenRouter for LLM processing and the official Notion MCP server for database interaction.
+DraftStream is a .NET 9 AI agent that captures notes, tasks, and code snippets from Telegram and stores them in Notion databases. It uses OpenRouter for LLM processing and the official Notion MCP server for database interaction.
 
 ## Architecture
 
@@ -14,26 +14,45 @@ DraftStream is a .NET 8+ AI agent that captures notes, tasks, and code snippets 
 
 ## Tech Stack
 
-- **C# / .NET 8+**
+- **C# / .NET 9**
 - **Telegram.Bot** — Telegram bot SDK
 - **OpenRouter API** — OpenAI-compatible REST API for LLM (targeting free/cheap models)
 - **ModelContextProtocol SDK for .NET** — MCP client
 - **Notion MCP Server** — official Notion MCP server (`@notionhq/notion-mcp-server`, runs as stdio)
 
+## Project Structure
+
+```
+src/DraftStream.Domain              — enums, value objects (no dependencies)
+src/DraftStream.Application         — interfaces, shared contracts (→ Domain)
+src/DraftStream.Application.Notes   — Notes workflow (→ Application)
+src/DraftStream.Application.Tasks   — Tasks workflow (→ Application)
+src/DraftStream.Application.Snippets— Snippets workflow (→ Application)
+src/DraftStream.Infrastructure      — Infisical, Serilog, OTel, external integrations (→ Application.*)
+src/DraftStream.Host                — composition root, worker service (→ Infrastructure)
+```
+
 ## Build & Run
 
 ```bash
-dotnet build src/DraftStream.Agent
-dotnet run --project src/DraftStream.Agent
-dotnet test tests/DraftStream.Tests
+dotnet build
+dotnet run --project src/DraftStream.Host
+docker-compose up --build          # app + Seq (http://localhost:5341)
 ```
 
 ## Configuration
 
-API keys are stored in .NET User Secrets (never committed):
-- `Telegram:BotToken`
-- `OpenRouter:ApiKey`
-- `Notion:IntegrationToken`
+Secrets are managed via **Infisical** (Universal Auth). Without credentials, the app starts normally but skips secret loading.
+
+- `Infisical:ProjectId` / `Infisical:Environment` — in appsettings.json
+- `Infisical:ClientId` / `Infisical:ClientSecret` — env vars only (never in appsettings)
+- Application secrets in Infisical: `Telegram__BotToken`, `OpenRouter__ApiKey`, `Notion__IntegrationToken`
+
+## Post-Phase Checklist
+
+After completing each implementation phase, update:
+- **README.md** — new commands, features, configuration changes
+- **CLAUDE.md** — build instructions, project structure, new conventions
 
 ## Key Design Decisions
 
