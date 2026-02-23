@@ -17,7 +17,7 @@ try
 
     builder.Services.AddSerilog(config => config.ReadFrom.Configuration(builder.Configuration));
 
-    builder.Services.AddInfrastructure();
+    builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddHostedService<HealthCheckWorker>();
 
     IHost app = builder.Build();
