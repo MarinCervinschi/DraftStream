@@ -19,7 +19,9 @@
       "Bash(git commit:*)",
       "Bash(git log:*)",
       "Bash(git push:*)",
-      "Bash(gh pr create:*)"
+      "Bash(gh pr create:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)"
     ]
   }
 }
