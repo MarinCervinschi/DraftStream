@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace DraftStream.Application.Notes;
 
-[WorkflowHandler("notes")]
 public sealed class NotesWorkflowHandler : IWorkflowHandler
 {
     private readonly ILogger<NotesWorkflowHandler> _logger;

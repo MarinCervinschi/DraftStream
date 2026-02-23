@@ -1,6 +1,8 @@
-using System.Reflection;
 using DraftStream.Application;
 using DraftStream.Application.Messaging;
+using DraftStream.Application.Notes;
+using DraftStream.Application.Snippets;
+using DraftStream.Application.Tasks;
 using DraftStream.Infrastructure.Messaging;
 using DraftStream.Infrastructure.Observability;
 using DraftStream.Infrastructure.Telegram;
@@ -29,27 +31,10 @@ public static class DependencyInjection
         services.AddHostedService<MessageSourceBackgroundService>();
     }
 
-    private static readonly Type[] _handlerAssemblyAnchors =
-    [
-        typeof(Application.Notes.NotesWorkflowHandler),
-        typeof(Application.Tasks.TasksWorkflowHandler),
-        typeof(Application.Snippets.SnippetsWorkflowHandler),
-    ];
-
     private static void AddWorkflowHandlers(this IServiceCollection services)
     {
-        IEnumerable<Type> handlerTypes = _handlerAssemblyAnchors
-            .Select(t => t.Assembly)
-            .Distinct()
-            .SelectMany(a => a.GetTypes())
-            .Where(t => t is { IsClass: true, IsAbstract: false }
-                        && typeof(IWorkflowHandler).IsAssignableFrom(t)
-                        && t.GetCustomAttribute<WorkflowHandlerAttribute>() is not null);
-
-        foreach (Type type in handlerTypes)
-        {
-            string name = type.GetCustomAttribute<WorkflowHandlerAttribute>()!.Name;
-            services.AddKeyedSingleton(typeof(IWorkflowHandler), name, type);
-        }
+        services.AddKeyedSingleton<IWorkflowHandler, NotesWorkflowHandler>("notes");
+        services.AddKeyedSingleton<IWorkflowHandler, TasksWorkflowHandler>("tasks");
+        services.AddKeyedSingleton<IWorkflowHandler, SnippetsWorkflowHandler>("snippets");
     }
 }

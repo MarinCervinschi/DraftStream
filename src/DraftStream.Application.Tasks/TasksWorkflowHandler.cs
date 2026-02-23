@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace DraftStream.Application.Tasks;
 
-[WorkflowHandler("tasks")]
 public sealed class TasksWorkflowHandler : IWorkflowHandler
 {
     private readonly ILogger<TasksWorkflowHandler> _logger;
