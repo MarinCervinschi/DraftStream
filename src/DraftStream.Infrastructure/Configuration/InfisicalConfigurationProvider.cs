@@ -35,7 +35,15 @@ public sealed class InfisicalConfigurationProvider : ConfigurationProvider
     {
         string? clientId = _bootstrapConfig["Infisical:ClientId"];
         string? clientSecret = _bootstrapConfig["Infisical:ClientSecret"];
-        return !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
+
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            Console.WriteLine(
+                "[INF] Infisical credentials not found (Infisical__ClientId / Infisical__ClientSecret), skipping secret loading");
+            return false;
+        }
+
+        return true;
     }
 
     private async Task LoadAsync()
@@ -47,7 +55,7 @@ public sealed class InfisicalConfigurationProvider : ConfigurationProvider
 
         string siteUrl = _bootstrapConfig["Infisical:SiteUrl"] ?? "https://app.infisical.com";
 
-        var settings = new InfisicalSdkSettingsBuilder()
+        InfisicalSdkSettings settings = new InfisicalSdkSettingsBuilder()
             .WithHostUri(siteUrl)
             .Build();
 
