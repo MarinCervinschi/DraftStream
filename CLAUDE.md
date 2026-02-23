@@ -9,7 +9,8 @@ DraftStream is a .NET 9 AI agent that captures notes, tasks, and code snippets f
 ## Architecture
 
 - **Workflow-based, not a chatbot** — each Telegram topic is a separate workflow panel (Notes, Tasks, Snippets) with its own system prompt and Notion target database.
-- **Flow**: Telegram message → topic routing → panel-specific prompt → OpenRouter LLM → MCP tool calls → Notion database write → Telegram confirmation.
+- **Flow**: Message source → `IMessageDispatcher` → `IWorkflowHandler` (keyed by workflow name) → (future: LLM → MCP → Notion → reply).
+- **Message source strategy** — `IMessageSource` abstraction in Application layer. Telegram is the first implementation; new sources (Discord, webhooks) can be added by implementing the interface and registering in DI.
 - **MCP pattern**: The agent acts as an MCP client connecting to the Notion MCP server (stdio process). The LLM decides which MCP tools to call based on the extracted data.
 
 ## Tech Stack
@@ -24,11 +25,14 @@ DraftStream is a .NET 9 AI agent that captures notes, tasks, and code snippets f
 
 ```
 src/DraftStream.Domain              — enums, value objects (no dependencies)
-src/DraftStream.Application         — interfaces, shared contracts (→ Domain)
-src/DraftStream.Application.Notes   — Notes workflow (→ Application)
-src/DraftStream.Application.Tasks   — Tasks workflow (→ Application)
-src/DraftStream.Application.Snippets— Snippets workflow (→ Application)
-src/DraftStream.Infrastructure      — Infisical, Serilog, OTel, external integrations (→ Application.*)
+src/DraftStream.Application         — interfaces, shared contracts, messaging abstractions (→ Domain)
+  Messaging/                        — IMessageSource, IMessageDispatcher, IncomingMessage
+src/DraftStream.Application.Notes   — Notes workflow handler (→ Application)
+src/DraftStream.Application.Tasks   — Tasks workflow handler (→ Application)
+src/DraftStream.Application.Snippets— Snippets workflow handler (→ Application)
+src/DraftStream.Infrastructure      — Infisical, Serilog, OTel, Telegram, external integrations (→ Application.*)
+  Messaging/                        — MessageDispatcher, MessageSourceBackgroundService
+  Telegram/                         — TelegramMessageSource, TelegramSettings
 src/DraftStream.Host                — composition root, worker service (→ Infrastructure)
 ```
 
@@ -44,9 +48,9 @@ docker-compose up --build          # app + Seq (http://localhost:5341)
 
 Secrets are managed via **Infisical** (Universal Auth). Without credentials, the app starts normally but skips secret loading.
 
-- `Infisical:ProjectId` / `Infisical:Environment` — in appsettings.json
+- `Infisical:ProjectId` / `Infisical:Environment` / `Infisical:SiteUrl` — in appsettings.json
 - `Infisical:ClientId` / `Infisical:ClientSecret` — env vars only (never in appsettings)
-- Application secrets in Infisical: `Telegram__BotToken`, `OpenRouter__ApiKey`, `Notion__IntegrationToken`
+- Application secrets in Infisical: `Telegram__BotToken`, `Telegram__GroupId`, `Telegram__TopicMappings__<id>`, `OpenRouter__ApiKey`, `Notion__IntegrationToken`
 
 ## Post-Phase Checklist
 
@@ -56,6 +60,8 @@ After completing each implementation phase, update:
 
 ## Key Design Decisions
 
+- **Message source abstraction** — `IMessageSource` in Application, implementations in Infrastructure. `MessageSourceBackgroundService` starts all registered sources. Adding a new source = implement `IMessageSource` + register in DI.
+- **Workflow handler discovery** — `[WorkflowHandler("name")]` attribute + `IWorkflowHandler` interface. Handlers are auto-discovered and registered as keyed singletons. `IMessageDispatcher` resolves by workflow name.
 - OpenRouter is used instead of direct model APIs to access free-tier models and easily switch between them.
 - Each panel/workflow can override the default LLM model if needed.
 - The LLM's job is simple structured extraction (text → JSON properties), so small/free models suffice.

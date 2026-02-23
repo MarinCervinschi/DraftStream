@@ -83,6 +83,26 @@ EOF
 docker-compose up --build
 ```
 
+## Telegram Configuration
+
+The bot connects to a Telegram group with Topics (Forum mode). Each topic maps to a workflow:
+
+| Infisical Secret | Description |
+|---|---|
+| `Telegram__BotToken` | Bot token from @BotFather |
+| `Telegram__GroupId` | Telegram group ID (negative number) |
+| `Telegram__TopicMappings__<threadId>` | Maps topic thread ID to workflow name (`notes`, `tasks`, `snippets`) |
+
+Example Infisical secrets:
+```
+Telegram__BotToken=123456789:ABCdefGHI...
+Telegram__GroupId=-1001234567890
+Telegram__TopicMappings__2=notes
+Telegram__TopicMappings__3=tasks
+Telegram__TopicMappings__4=snippets
+```
+
 ## Current Status
 
-- **Phase 0** — Solution scaffolding, Clean Architecture, Infisical integration, Serilog/Seq logging, OpenTelemetry tracing, Docker setup. App starts and logs to console/Seq.
+- **Phase 1** — Telegram bot integration with message source abstraction. Bot receives messages via long polling, routes by topic to workflow handlers. Extensible to support additional message sources (Discord, webhooks, etc.).
+- **Phase 0** — Solution scaffolding, Clean Architecture, Infisical integration, Serilog/Seq logging, OpenTelemetry tracing, Docker setup.
