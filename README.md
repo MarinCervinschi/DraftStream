@@ -112,8 +112,22 @@ The LLM client connects to OpenRouter's OpenAI-compatible API with built-in resi
 | `OpenRouter:DefaultModel` | appsettings.json | Default model for all workflows |
 | `OpenRouter:ModelOverrides` | appsettings.json | Per-workflow model overrides (e.g., `{ "notes": "google/gemma-2-9b-it:free" }`) |
 
+## Notion MCP Configuration
+
+DraftStream connects to Notion via the official MCP server (`@notionhq/notion-mcp-server`), spawned as a stdio child process. **Requires Node.js/npx** on the host.
+
+| Setting | Location | Description |
+|---|---|---|
+| `Notion__IntegrationToken` | Infisical | Notion integration token (starts with `ntn_...`) |
+| `Notion__DatabaseIds__notes` | Infisical | Database ID for the Notes workflow |
+| `Notion__DatabaseIds__tasks` | Infisical | Database ID for the Tasks workflow |
+| `Notion__DatabaseIds__snippets` | Infisical | Database ID for the Snippets workflow |
+
+The MCP server process starts lazily on first use and reconnects automatically on failure.
+
 ## Current Status
 
+- **Phase 3** — Notion MCP client via `ModelContextProtocol` SDK. Spawns `@notionhq/notion-mcp-server` as stdio child process. Lazy init, thread-safe, reconnect-on-failure, tool definition caching. OpenTelemetry tracing on MCP operations.
 - **Phase 2** — OpenRouter LLM client with OpenAI-compatible chat completion and tool/function calling support. Typed HttpClient with Polly resilience (retry, circuit breaker, timeouts). OpenTelemetry tracing on LLM calls.
 - **Phase 1** — Telegram bot integration with message source abstraction. Bot receives messages via long polling, routes by topic to workflow handlers. Extensible to support additional message sources (Discord, webhooks, etc.).
 - **Phase 0** — Solution scaffolding, Clean Architecture, Infisical integration, Serilog/Seq logging, OpenTelemetry tracing, Docker setup.
