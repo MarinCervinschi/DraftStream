@@ -102,7 +102,18 @@ Telegram__TopicMappings__3=tasks
 Telegram__TopicMappings__4=snippets
 ```
 
+## OpenRouter Configuration
+
+The LLM client connects to OpenRouter's OpenAI-compatible API with built-in resilience (retry on 429/5xx, circuit breaker, timeouts via Polly).
+
+| Setting | Location | Description |
+|---|---|---|
+| `OpenRouter__ApiKey` | Infisical | API key from [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `OpenRouter:DefaultModel` | appsettings.json | Default model for all workflows |
+| `OpenRouter:ModelOverrides` | appsettings.json | Per-workflow model overrides (e.g., `{ "notes": "google/gemma-2-9b-it:free" }`) |
+
 ## Current Status
 
+- **Phase 2** — OpenRouter LLM client with OpenAI-compatible chat completion and tool/function calling support. Typed HttpClient with Polly resilience (retry, circuit breaker, timeouts). OpenTelemetry tracing on LLM calls.
 - **Phase 1** — Telegram bot integration with message source abstraction. Bot receives messages via long polling, routes by topic to workflow handlers. Extensible to support additional message sources (Discord, webhooks, etc.).
 - **Phase 0** — Solution scaffolding, Clean Architecture, Infisical integration, Serilog/Seq logging, OpenTelemetry tracing, Docker setup.
