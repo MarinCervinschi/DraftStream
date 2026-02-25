@@ -1,11 +1,13 @@
 using System.Net.Http.Headers;
 using DraftStream.Application;
 using DraftStream.Application.Llm;
+using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Notes;
 using DraftStream.Application.Snippets;
 using DraftStream.Application.Tasks;
 using DraftStream.Infrastructure.Messaging;
+using DraftStream.Infrastructure.Notion;
 using DraftStream.Infrastructure.Observability;
 using DraftStream.Infrastructure.OpenRouter;
 using DraftStream.Infrastructure.Telegram;
@@ -27,6 +29,7 @@ public static class DependencyInjection
         services.AddWorkflowHandlers();
         services.AddMessaging(configuration);
         services.AddOpenRouter(configuration);
+        services.AddNotionMcp(configuration);
         return services;
     }
 
@@ -68,5 +71,11 @@ public static class DependencyInjection
                 options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
                 options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
             });
+    }
+
+    private static void AddNotionMcp(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<NotionSettings>(configuration.GetSection(NotionSettings.SectionName));
+        services.AddSingleton<IMcpToolClient, NotionMcpClient>();
     }
 }
