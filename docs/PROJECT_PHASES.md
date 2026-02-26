@@ -9,7 +9,7 @@ DraftStream is a .NET 8+ AI agent that captures notes, tasks, and code snippets 
 | Decision | Choice |
 |----------|--------|
 | Architecture | Clean Architecture |
-| Workflow separation | Separate assembly per workflow |
+| Workflow separation | Single generic handler, schema-driven from Notion |
 | Secrets management | Infisical (self-hosted) |
 | Logging | Serilog → Seq |
 | Observability | OpenTelemetry (distributed tracing) |
@@ -22,11 +22,10 @@ DraftStream is a .NET 8+ AI agent that captures notes, tasks, and code snippets 
 ```
 DraftStream/
 ├── src/
-│   ├── DraftStream.Domain/                 # Entities, Value Objects, Enums
-│   ├── DraftStream.Application/            # Shared interfaces, abstractions, DTOs
-│   ├── DraftStream.Application.Notes/      # Notes use cases & prompt
-│   ├── DraftStream.Application.Tasks/      # Tasks use cases & prompt
-│   ├── DraftStream.Application.Snippets/   # Snippets use cases & prompt
+│   ├── DraftStream.Domain/                 # Enums, Value Objects
+│   ├── DraftStream.Application/            # Shared interfaces, workflows, prompts
+│   │   ├── Workflows/                      # SchemaWorkflowHandler, WorkflowSettings
+│   │   └── Prompts/                        # PromptBuilder, notes.md, tasks.md, snippets.md
 │   ├── DraftStream.Infrastructure/         # Telegram, OpenRouter, MCP, Infisical, Observability
 │   └── DraftStream.Host/                   # Composition root, DI, Program.cs
 ├── docker-compose.yml
@@ -47,9 +46,7 @@ DraftStream/
 | 1 | Telegram | Bot integration with topic routing |
 | 2 | OpenRouter | LLM client with tool calling support |
 | 3 | Notion MCP | MCP client for Notion operations |
-| 4 | Notes | First end-to-end workflow |
-| 5 | Tasks | Workflow with rich schema (priority, dates) |
-| 6 | Snippets | Code/command focused workflow |
+| 4-6 | Schema-Driven Workflows | Generic handler for all workflows (Notes, Tasks, Snippets) — schema-driven from Notion |
 | 7 | Hardening | Health checks, error handling, production readiness |
 | 8 | Future | Webhooks, read/search, multi-user |
 
@@ -156,76 +153,32 @@ DraftStream/
 
 ---
 
-## Phase 4 — Notes Workflow (End-to-End)
+## Phases 4-6 — Schema-Driven Workflow Engine (Combined)
 
-**Goal**: First complete workflow — message in Notes topic → saved in Notion.
+**Goal**: All three workflows (Notes, Tasks, Snippets) via a single generic handler with dynamic Notion schema discovery.
 
-### Tasks
-
-- [ ] **Domain** (`DraftStream.Domain`):
-  - [ ] `Note` entity (Title, Content, Tags, Source, CreatedAt)
-  - [ ] `Tag` value object
-  - [ ] `WorkflowType` enum (Notes, Tasks, Snippets)
-- [ ] **Application.Notes** (`DraftStream.Application.Notes`):
-  - [ ] `ProcessNoteCommand` (message text, metadata)
-  - [ ] `ProcessNoteHandler` (MediatR handler)
-  - [ ] `NoteDto` (extracted: title, content, tags[])
-  - [ ] `notes-prompt.md` — system prompt for LLM extraction
-  - [ ] Tool definition for Notion page creation
-- [ ] **Infrastructure**:
-  - [ ] `NotesWorkflowService` — orchestrates LLM → MCP flow
-  - [ ] Wire up Telegram message → MediatR command
-- [ ] **Host**:
-  - [ ] Register Notes workflow in DI
-- [ ] Implement confirmation message back to Telegram
-- [ ] Verify: Send message in Notes topic → appears in Notion → confirmation in Telegram
-- [ ] Verify: Full trace visible in Seq
-
----
-
-## Phase 5 — Tasks Workflow
-
-**Goal**: Second workflow with richer schema (priority, due date, project).
+**Architecture change**: Instead of separate assemblies with hardcoded domain entities per workflow, a single `SchemaWorkflowHandler` dynamically fetches the Notion database schema via MCP, injects it into the LLM prompt, and lets the LLM fill properties based on actual columns. Zero code changes when Notion schema changes.
 
 ### Tasks
 
-- [ ] **Domain**:
-  - [ ] `TaskItem` entity (Title, Description, Status, Priority, Project, Labels, DueDate)
-  - [ ] `Priority` enum (Low, Medium, High, Urgent)
-  - [ ] `TaskStatus` enum (NotStarted, InProgress, Done)
-  - [ ] `Project` value object
-- [ ] **Application.Tasks** (`DraftStream.Application.Tasks`):
-  - [ ] `ProcessTaskCommand` / `ProcessTaskHandler`
-  - [ ] `TaskDto` (extracted fields)
-  - [ ] `tasks-prompt.md` — system prompt with date parsing hints
-  - [ ] Tool definition for task creation
-- [ ] Implement relative date parsing in prompt:
-  - [ ] "friday" → next Friday's date
-  - [ ] "next week" → Monday of next week
-  - [ ] "tomorrow", "in 3 days", etc.
-- [ ] Format confirmation message with task details
-- [ ] Verify: Task message → Notion with correct properties → formatted confirmation
-
----
-
-## Phase 6 — Snippets Workflow
-
-**Goal**: Third workflow optimized for code/commands.
-
-### Tasks
-
-- [ ] **Domain**:
-  - [ ] `Snippet` entity (Title, Code, Language, Tags, Description)
-  - [ ] `Language` enum (Bash, Sql, CSharp, Docker, Git, Python, JavaScript, Other)
-- [ ] **Application.Snippets** (`DraftStream.Application.Snippets`):
-  - [ ] `ProcessSnippetCommand` / `ProcessSnippetHandler`
-  - [ ] `SnippetDto` (extracted fields)
-  - [ ] `snippets-prompt.md` — system prompt with:
-    - [ ] Code block detection
-    - [ ] Language auto-detection hints
-    - [ ] Preserve formatting
-- [ ] Handle Telegram code formatting (``` blocks)
-- [ ] Verify: Code/command message → Notion snippet → confirmation
+- [x] Remove separate workflow assemblies (Application.Notes, Application.Tasks, Application.Snippets)
+- [x] Create `WorkflowSettings` / `WorkflowConfig` — per-workflow configuration (DatabaseId, ModelOverride)
+- [x] Create `PromptBuilder` — loads embedded prompt templates, formats Notion schema, builds system prompts
+- [x] Create embedded prompt templates: `notes.md`, `tasks.md`, `snippets.md`
+- [x] Create `SchemaWorkflowHandler` — generic handler with agentic tool loop:
+  - [x] Fetch database schema via MCP (`notion_retrieve_database`), cache until restart
+  - [x] Build system prompt with schema + workflow instructions
+  - [x] Multi-turn LLM conversation with MCP tool execution (max 10 iterations)
+  - [x] Error handling with user-friendly reply on failure
+- [x] Add `ReplyAsync` callback to `IncomingMessage` for source-agnostic reply
+- [x] Wire up reply in `TelegramMessageSource`
+- [x] Fix `LlmMessage.Content` nullability for tool call messages
+- [x] Update DI: config-driven keyed scoped handler registration, scope per dispatch
+- [x] Update configuration: `Workflows` section replaces `Notion:DatabaseIds`
+- [ ] Verify: Notes E2E — Telegram → Notion → confirmation
+- [ ] Verify: Tasks E2E — with date/priority parsing
+- [ ] Verify: Snippets E2E — with language detection
+- [ ] Verify: Schema change — add column in Notion → restart → LLM populates it
 
 ---
 
@@ -463,7 +416,5 @@ After each phase, verify:
 | 1 | Send message in Telegram topic → log in Seq with topic ID |
 | 2 | Send prompt to OpenRouter → receive structured response |
 | 3 | App connects to MCP → list tools → create test page |
-| 4 | Notes: Telegram → Notion → confirmation, trace in Seq |
-| 5 | Tasks: Telegram → Notion with dates/priority → confirmation |
-| 6 | Snippets: Code message → Notion with language → confirmation |
+| 4-6 | All workflows: Telegram → LLM (schema-aware) → MCP → Notion → confirmation, trace in Seq |
 | 7 | Health endpoints respond, errors are user-friendly |

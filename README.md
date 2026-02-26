@@ -26,10 +26,9 @@ Telegram → Topic Routing → Panel Prompt → OpenRouter LLM → MCP Tool Call
 DraftStream/
 ├── src/
 │   ├── DraftStream.Domain/              # Enums, value objects
-│   ├── DraftStream.Application/         # Interfaces, shared contracts
-│   ├── DraftStream.Application.Notes/   # Notes workflow handler
-│   ├── DraftStream.Application.Tasks/   # Tasks workflow handler
-│   ├── DraftStream.Application.Snippets/# Snippets workflow handler
+│   ├── DraftStream.Application/         # Interfaces, workflows, prompts, shared contracts
+│   │   ├── Workflows/                   # SchemaWorkflowHandler, WorkflowSettings
+│   │   └── Prompts/                     # PromptBuilder, notes.md, tasks.md, snippets.md
 │   ├── DraftStream.Infrastructure/      # Infisical, Serilog, OpenTelemetry, external integrations
 │   └── DraftStream.Host/               # Composition root (worker service)
 ├── Directory.Build.props                # Shared build properties
@@ -110,7 +109,6 @@ The LLM client connects to OpenRouter's OpenAI-compatible API with built-in resi
 |---|---|---|
 | `OpenRouter__ApiKey` | Infisical | API key from [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `OpenRouter:DefaultModel` | appsettings.json | Default model for all workflows |
-| `OpenRouter:ModelOverrides` | appsettings.json | Per-workflow model overrides (e.g., `{ "notes": "google/gemma-2-9b-it:free" }`) |
 
 ## Notion MCP Configuration
 
@@ -119,14 +117,32 @@ DraftStream connects to Notion via the official MCP server (`@notionhq/notion-mc
 | Setting | Location | Description |
 |---|---|---|
 | `Notion__IntegrationToken` | Infisical | Notion integration token (starts with `ntn_...`) |
-| `Notion__DatabaseIds__notes` | Infisical | Database ID for the Notes workflow |
-| `Notion__DatabaseIds__tasks` | Infisical | Database ID for the Tasks workflow |
-| `Notion__DatabaseIds__snippets` | Infisical | Database ID for the Snippets workflow |
 
 The MCP server process starts lazily on first use and reconnects automatically on failure.
 
+## Workflow Configuration
+
+Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under the `Workflows` section. The handler dynamically fetches the Notion database schema — **no code changes needed** when you add or remove database columns.
+
+| Setting | Location | Description |
+|---|---|---|
+| `Workflows:<name>:DatabaseId` | appsettings.json / Infisical | Notion database ID for the workflow |
+| `Workflows:<name>:ModelOverride` | appsettings.json | Optional LLM model override for this workflow |
+
+Example:
+```json
+{
+  "Workflows": {
+    "notes": { "DatabaseId": "abc123..." },
+    "tasks": { "DatabaseId": "def456...", "ModelOverride": "google/gemma-2-9b-it:free" },
+    "snippets": { "DatabaseId": "ghi789..." }
+  }
+}
+```
+
 ## Current Status
 
+- **Phases 4-6** — Schema-driven workflow engine. Single generic handler for all workflows (Notes, Tasks, Snippets). Dynamically fetches Notion database schema via MCP, injects it into the LLM prompt, and lets the LLM fill properties based on actual columns. Agentic tool loop with multi-turn conversations. Reply mechanism for confirmation messages. Zero code changes when Notion schema changes.
 - **Phase 3** — Notion MCP client via `ModelContextProtocol` SDK. Spawns `@notionhq/notion-mcp-server` as stdio child process. Lazy init, thread-safe, reconnect-on-failure, tool definition caching. OpenTelemetry tracing on MCP operations.
 - **Phase 2** — OpenRouter LLM client with OpenAI-compatible chat completion and tool/function calling support. Typed HttpClient with Polly resilience (retry, circuit breaker, timeouts). OpenTelemetry tracing on LLM calls.
 - **Phase 1** — Telegram bot integration with message source abstraction. Bot receives messages via long polling, routes by topic to workflow handlers. Extensible to support additional message sources (Discord, webhooks, etc.).
