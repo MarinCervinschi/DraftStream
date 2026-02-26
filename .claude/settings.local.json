@@ -26,7 +26,8 @@
       "WebFetch(domain:modelcontextprotocol.github.io)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:developers.notion.com)",
-      "WebFetch(domain:deepwiki.com)"
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(dotnet sln:*)"
     ]
   }
 }
