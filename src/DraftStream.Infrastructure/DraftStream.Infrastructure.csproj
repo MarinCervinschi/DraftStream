@@ -2,9 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DraftStream.Application\DraftStream.Application.csproj" />
-    <ProjectReference Include="..\DraftStream.Application.Notes\DraftStream.Application.Notes.csproj" />
-    <ProjectReference Include="..\DraftStream.Application.Tasks\DraftStream.Application.Tasks.csproj" />
-    <ProjectReference Include="..\DraftStream.Application.Snippets\DraftStream.Application.Snippets.csproj" />
   </ItemGroup>
 
   <ItemGroup>
