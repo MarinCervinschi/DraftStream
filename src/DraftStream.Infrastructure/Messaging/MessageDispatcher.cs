@@ -25,7 +25,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
         activity?.SetTag("workflow", message.WorkflowName);
         activity?.SetTag("source", message.SourceType);
 
-        IWorkflowHandler? handler = _serviceProvider
+        using IServiceScope scope = _serviceProvider.CreateScope();
+
+        IWorkflowHandler? handler = scope.ServiceProvider
             .GetKeyedService<IWorkflowHandler>(message.WorkflowName);
 
         if (handler is null)

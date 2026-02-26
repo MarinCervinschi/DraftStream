@@ -13,4 +13,6 @@ public sealed class IncomingMessage
     public required string SourceType { get; init; }
 
     public Dictionary<string, string> SourceContext { get; init; } = new();
+
+    public Func<string, CancellationToken, Task>? ReplyAsync { get; init; }
 }

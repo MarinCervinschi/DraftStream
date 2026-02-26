@@ -46,13 +46,14 @@ public sealed class TelegramMessageSource : IMessageSource
         _logger.LogInformation("Telegram message source started for group {GroupId}", _settings.GroupId);
 
         await client.ReceiveAsync(
-            updateHandler: (bot, update, ct) => HandleUpdateAsync(update, onMessageReceived, ct),
+            updateHandler: (bot, update, ct) => HandleUpdateAsync(bot, update, onMessageReceived, ct),
             errorHandler: (bot, exception, ct) => HandleErrorAsync(exception),
             receiverOptions: receiverOptions,
             cancellationToken: cancellationToken);
     }
 
     private async Task HandleUpdateAsync(
+        ITelegramBotClient botClient,
         Update update,
         Func<IncomingMessage, Task> onMessageReceived,
         CancellationToken cancellationToken)
@@ -98,6 +99,15 @@ public sealed class TelegramMessageSource : IMessageSource
                 ["ChatId"] = message.Chat.Id.ToString(),
                 ["MessageId"] = message.MessageId.ToString(),
                 ["ThreadId"] = message.MessageThreadId?.ToString() ?? ""
+            },
+            ReplyAsync = async (text, ct) =>
+            {
+                await botClient.SendMessage(
+                    message.Chat.Id,
+                    text,
+                    messageThreadId: message.MessageThreadId,
+                    replyParameters: new ReplyParameters { MessageId = message.MessageId },
+                    cancellationToken: ct);
             }
         };
 

@@ -7,6 +7,4 @@ public sealed class OpenRouterSettings
     public required string ApiKey { get; init; }
 
     public required string DefaultModel { get; init; }
-
-    public Dictionary<string, string> ModelOverrides { get; init; } = new();
 }

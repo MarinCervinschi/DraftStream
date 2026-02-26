@@ -3,9 +3,8 @@ using DraftStream.Application;
 using DraftStream.Application.Llm;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
-using DraftStream.Application.Notes;
-using DraftStream.Application.Snippets;
-using DraftStream.Application.Tasks;
+using DraftStream.Application.Prompts;
+using DraftStream.Application.Workflows;
 using DraftStream.Infrastructure.Messaging;
 using DraftStream.Infrastructure.Notion;
 using DraftStream.Infrastructure.Observability;
@@ -14,6 +13,7 @@ using DraftStream.Infrastructure.Telegram;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 
@@ -26,7 +26,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDraftStreamOpenTelemetry();
-        services.AddWorkflowHandlers();
+        services.AddWorkflowHandlers(configuration);
         services.AddMessaging(configuration);
         services.AddOpenRouter(configuration);
         services.AddNotionMcp(configuration);
@@ -41,11 +41,28 @@ public static class DependencyInjection
         services.AddHostedService<MessageSourceBackgroundService>();
     }
 
-    private static void AddWorkflowHandlers(this IServiceCollection services)
+    private static void AddWorkflowHandlers(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddKeyedSingleton<IWorkflowHandler, NotesWorkflowHandler>("notes");
-        services.AddKeyedSingleton<IWorkflowHandler, TasksWorkflowHandler>("tasks");
-        services.AddKeyedSingleton<IWorkflowHandler, SnippetsWorkflowHandler>("snippets");
+        services.Configure<WorkflowSettings>(configuration.GetSection(WorkflowSettings.SectionName));
+        services.AddSingleton<PromptBuilder>();
+
+        WorkflowSettings workflowSettings = configuration
+            .GetSection(WorkflowSettings.SectionName)
+            .Get<WorkflowSettings>() ?? new WorkflowSettings();
+
+        foreach (KeyValuePair<string, WorkflowConfig> entry in workflowSettings.Items)
+        {
+            string workflowName = entry.Key;
+            WorkflowConfig config = entry.Value;
+
+            services.AddKeyedScoped<IWorkflowHandler>(workflowName, (sp, _) =>
+                new SchemaWorkflowHandler(
+                    sp.GetRequiredService<ILlmClient>(),
+                    sp.GetRequiredService<IMcpToolClient>(),
+                    config,
+                    sp.GetRequiredService<PromptBuilder>(),
+                    sp.GetRequiredService<ILogger<SchemaWorkflowHandler>>()));
+        }
     }
 
     private static void AddOpenRouter(this IServiceCollection services, IConfiguration configuration)
