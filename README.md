@@ -7,15 +7,17 @@ AI-powered agent that captures notes, tasks, and code snippets from Telegram and
 DraftStream is a **workflow-based agent**, not a chatbot. It uses a Telegram group with topics (Forum). Each topic is a dedicated workflow panel (Notes, Tasks, Snippets) with its own system prompt and Notion target database.
 
 ```
-Telegram → Topic Routing → Panel Prompt → OpenRouter LLM → MCP Tool Calls → Notion
+Telegram → Topic Routing → Panel Prompt → IChatClient (OpenRouter) → FunctionInvokingChatClient → MCP Tools → Notion
 ```
 
 ## Tech Stack
 
 - **C# / .NET 9** — Worker service
 - **Telegram.Bot** — Telegram bot SDK
+- **Microsoft.Extensions.AI** — `IChatClient` with automatic tool invocation middleware
 - **OpenRouter API** — LLM (free/cheap models, OpenAI-compatible)
-- **Notion MCP Server** — official `@notionhq/notion-mcp-server` (stdio)
+- **ModelContextProtocol SDK** — MCP client (`McpClientTool` → `AIFunction` integration)
+- **Notion MCP Server** — `@notionhq/notion-mcp-server` (stdio)
 - **Infisical** — secrets management
 - **Serilog + Seq** — structured logging
 - **OpenTelemetry** — tracing
@@ -27,6 +29,7 @@ DraftStream/
 ├── src/
 │   ├── DraftStream.Domain/              # Enums, value objects
 │   ├── DraftStream.Application/         # Interfaces, workflows, prompts, shared contracts
+│   │   ├── Mcp/                         # IMcpToolProvider, McpToolResult
 │   │   ├── Workflows/                   # SchemaWorkflowHandler, WorkflowSettings
 │   │   └── Prompts/                     # PromptBuilder, notes.md, tasks.md, snippets.md
 │   ├── DraftStream.Infrastructure/      # Infisical, Serilog, OpenTelemetry, external integrations
@@ -103,7 +106,7 @@ Telegram__TopicMappings__4=snippets
 
 ## OpenRouter Configuration
 
-The LLM client connects to OpenRouter's OpenAI-compatible API with built-in resilience (retry on 429/5xx, circuit breaker, timeouts via Polly).
+The LLM client uses `IChatClient` from `Microsoft.Extensions.AI` backed by `Microsoft.Extensions.AI.OpenAI` pointing at OpenRouter's endpoint. HTTP resilience (retry on 429/5xx, circuit breaker, timeouts) via Polly. The `FunctionInvokingChatClient` middleware handles the tool invocation loop automatically.
 
 | Setting | Location | Description |
 |---|---|---|
@@ -122,28 +125,31 @@ The MCP server process starts lazily on first use and reconnects automatically o
 
 ## Workflow Configuration
 
-Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under the `Workflows` section. The handler dynamically fetches the Notion database schema — **no code changes needed** when you add or remove database columns.
+Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under `Workflows:Items`. The handler dynamically fetches the Notion database schema via a two-step MCP call (database → data source) — **no code changes needed** when you add or remove database columns.
 
 | Setting | Location | Description |
 |---|---|---|
-| `Workflows:<name>:DatabaseId` | appsettings.json / Infisical | Notion database ID for the workflow |
-| `Workflows:<name>:ModelOverride` | appsettings.json | Optional LLM model override for this workflow |
+| `Workflows:Items:<name>:DatabaseId` | appsettings.json / Infisical | Notion database ID for the workflow |
+| `Workflows:Items:<name>:ModelOverride` | appsettings.json | Optional LLM model override for this workflow |
 
 Example:
 ```json
 {
   "Workflows": {
-    "notes": { "DatabaseId": "abc123..." },
-    "tasks": { "DatabaseId": "def456...", "ModelOverride": "google/gemma-2-9b-it:free" },
-    "snippets": { "DatabaseId": "ghi789..." }
+    "Items": {
+      "notes": { "DatabaseId": "abc123..." },
+      "tasks": { "DatabaseId": "def456...", "ModelOverride": "google/gemma-2-9b-it:free" },
+      "snippets": { "DatabaseId": "ghi789..." }
+    }
   }
 }
 ```
 
 ## Current Status
 
-- **Phases 4-6** — Schema-driven workflow engine. Single generic handler for all workflows (Notes, Tasks, Snippets). Dynamically fetches Notion database schema via MCP, injects it into the LLM prompt, and lets the LLM fill properties based on actual columns. Agentic tool loop with multi-turn conversations. Reply mechanism for confirmation messages. Zero code changes when Notion schema changes.
-- **Phase 3** — Notion MCP client via `ModelContextProtocol` SDK. Spawns `@notionhq/notion-mcp-server` as stdio child process. Lazy init, thread-safe, reconnect-on-failure, tool definition caching. OpenTelemetry tracing on MCP operations.
-- **Phase 2** — OpenRouter LLM client with OpenAI-compatible chat completion and tool/function calling support. Typed HttpClient with Polly resilience (retry, circuit breaker, timeouts). OpenTelemetry tracing on LLM calls.
+- **Phase 7** — Replaced manual agentic tool loop with `Microsoft.Extensions.AI` SDK integration. `IChatClient` with `FunctionInvokingChatClient` middleware handles tool invocation automatically. `McpClientTool` (inherits `AIFunction`) plugs directly into `ChatOptions.Tools`. Removed ~400 lines of custom LLM client, API models, and tool loop code. Updated Notion MCP schema fetch to two-step data source flow (`API-retrieve-a-database` → `API-retrieve-a-data-source`).
+- **Phases 4-6** — Schema-driven workflow engine. Single generic handler for all workflows (Notes, Tasks, Snippets). Dynamically fetches Notion database schema, injects it into the LLM prompt, and lets the LLM fill properties based on actual columns. Reply mechanism for confirmation messages. Zero code changes when Notion schema changes.
+- **Phase 3** — Notion MCP client via `ModelContextProtocol` SDK. Spawns `@notionhq/notion-mcp-server` as stdio child process. Lazy init, thread-safe, reconnect-on-failure, tool caching. OpenTelemetry tracing on MCP operations.
+- **Phase 2** — OpenRouter LLM via `IChatClient` pipeline with HTTP resilience (Polly: retry, circuit breaker, timeouts).
 - **Phase 1** — Telegram bot integration with message source abstraction. Bot receives messages via long polling, routes by topic to workflow handlers. Extensible to support additional message sources (Discord, webhooks, etc.).
 - **Phase 0** — Solution scaffolding, Clean Architecture, Infisical integration, Serilog/Seq logging, OpenTelemetry tracing, Docker setup.
