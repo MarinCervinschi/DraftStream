@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
-using DraftStream.Application.Llm;
 using DraftStream.Application.Mcp;
 using DraftStream.Infrastructure.Observability;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
@@ -10,7 +10,7 @@ using ModelContextProtocol.Protocol;
 
 namespace DraftStream.Infrastructure.Notion;
 
-public sealed class NotionMcpClient : IMcpToolClient, IAsyncDisposable
+public sealed class NotionMcpClient : IMcpToolProvider, IAsyncDisposable
 {
     private readonly NotionSettings _settings;
     private readonly ILogger<NotionMcpClient> _logger;
@@ -18,7 +18,7 @@ public sealed class NotionMcpClient : IMcpToolClient, IAsyncDisposable
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
     private McpClient? _client;
-    private IReadOnlyList<LlmToolDefinition>? _cachedToolDefinitions;
+    private IReadOnlyList<AITool>? _cachedTools;
     private bool _disposed;
 
     public NotionMcpClient(
@@ -31,11 +31,10 @@ public sealed class NotionMcpClient : IMcpToolClient, IAsyncDisposable
         _loggerFactory = loggerFactory;
     }
 
-    public async Task<IReadOnlyList<LlmToolDefinition>> GetToolDefinitionsAsync(
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AITool>> GetToolsAsync(CancellationToken cancellationToken)
     {
-        if (_cachedToolDefinitions is not null)
-            return _cachedToolDefinitions;
+        if (_cachedTools is not null)
+            return _cachedTools;
 
         using Activity? activity = OpenTelemetryConfiguration.ActivitySource
             .StartActivity("McpListTools");
@@ -48,15 +47,15 @@ public sealed class NotionMcpClient : IMcpToolClient, IAsyncDisposable
             IList<McpClientTool> tools = await client.ListToolsAsync(
                 cancellationToken: cancellationToken);
 
-            _cachedToolDefinitions = tools.Select(MapToToolDefinition).ToList();
+            _cachedTools = tools.Cast<AITool>().ToList();
 
-            activity?.SetTag("mcp.tool_count", _cachedToolDefinitions.Count);
+            activity?.SetTag("mcp.tool_count", _cachedTools.Count);
 
             _logger.LogInformation(
                 "Retrieved {ToolCount} tool definitions from Notion MCP server",
-                _cachedToolDefinitions.Count);
+                _cachedTools.Count);
 
-            return _cachedToolDefinitions;
+            return _cachedTools;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -67,7 +66,7 @@ public sealed class NotionMcpClient : IMcpToolClient, IAsyncDisposable
         }
     }
 
-    public async Task<McpToolResult> CallToolAsync(
+    public async Task<McpToolResult> CallToolDirectAsync(
         string toolName,
         string argumentsJson,
         CancellationToken cancellationToken)
@@ -256,21 +255,11 @@ public sealed class NotionMcpClient : IMcpToolClient, IAsyncDisposable
                 _client = null;
             }
 
-            _cachedToolDefinitions = null;
+            _cachedTools = null;
         }
         finally
         {
             _connectionLock.Release();
         }
-    }
-
-    private static LlmToolDefinition MapToToolDefinition(McpClientTool tool)
-    {
-        return new LlmToolDefinition
-        {
-            Name = tool.Name,
-            Description = tool.Description ?? string.Empty,
-            ParametersSchemaJson = tool.JsonSchema.ToString()
-        };
     }
 }

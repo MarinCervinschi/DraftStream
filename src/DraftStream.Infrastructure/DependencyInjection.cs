@@ -1,6 +1,6 @@
-using System.Net.Http.Headers;
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using DraftStream.Application;
-using DraftStream.Application.Llm;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Prompts;
@@ -10,11 +10,12 @@ using DraftStream.Infrastructure.Notion;
 using DraftStream.Infrastructure.Observability;
 using DraftStream.Infrastructure.OpenRouter;
 using DraftStream.Infrastructure.Telegram;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenAI;
 using Polly;
 
 namespace DraftStream.Infrastructure;
@@ -28,7 +29,7 @@ public static class DependencyInjection
         services.AddDraftStreamOpenTelemetry();
         services.AddWorkflowHandlers(configuration);
         services.AddMessaging(configuration);
-        services.AddOpenRouter(configuration);
+        services.AddLlmClient(configuration);
         services.AddNotionMcp(configuration);
         return services;
     }
@@ -50,32 +51,34 @@ public static class DependencyInjection
             .GetSection(WorkflowSettings.SectionName)
             .Get<WorkflowSettings>() ?? new WorkflowSettings();
 
+        if (workflowSettings.Items.Count == 0)
+        {
+            Console.WriteLine("[WRN] No workflow configurations found under Workflows:Items. No handlers will be registered.");
+        }
+
         foreach (KeyValuePair<string, WorkflowConfig> entry in workflowSettings.Items)
         {
             string workflowName = entry.Key;
             WorkflowConfig config = entry.Value;
 
+            Console.WriteLine($"[INF] Registering workflow handler '{workflowName}'");
+
             services.AddKeyedScoped<IWorkflowHandler>(workflowName, (sp, _) =>
                 new SchemaWorkflowHandler(
-                    sp.GetRequiredService<ILlmClient>(),
-                    sp.GetRequiredService<IMcpToolClient>(),
+                    sp.GetRequiredService<IChatClient>(),
+                    sp.GetRequiredService<IMcpToolProvider>(),
                     config,
                     sp.GetRequiredService<PromptBuilder>(),
                     sp.GetRequiredService<ILogger<SchemaWorkflowHandler>>()));
         }
     }
 
-    private static void AddOpenRouter(this IServiceCollection services, IConfiguration configuration)
+    private static void AddLlmClient(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<OpenRouterSettings>(configuration.GetSection(OpenRouterSettings.SectionName));
 
-        services.AddHttpClient<ILlmClient, OpenRouterClient>((sp, client) =>
+        services.AddHttpClient("OpenRouter", client =>
             {
-                OpenRouterSettings settings = sp.GetRequiredService<IOptions<OpenRouterSettings>>().Value;
-
-                client.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
-                client.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", settings.ApiKey);
                 client.DefaultRequestHeaders.Add("HTTP-Referer", "https://github.com/draftstream");
                 client.DefaultRequestHeaders.Add("X-Title", "DraftStream");
             })
@@ -86,13 +89,34 @@ public static class DependencyInjection
                 options.Retry.BackoffType = DelayBackoffType.Exponential;
                 options.Retry.UseJitter = true;
                 options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(60);
                 options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
             });
+
+        services.AddChatClient(sp =>
+        {
+            OpenRouterSettings settings = sp.GetRequiredService<IOptions<OpenRouterSettings>>().Value;
+            IHttpClientFactory httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            HttpClient httpClient = httpClientFactory.CreateClient("OpenRouter");
+
+            var openAiClient = new OpenAIClient(
+                new ApiKeyCredential(settings.ApiKey),
+                new OpenAIClientOptions
+                {
+                    Endpoint = new Uri("https://openrouter.ai/api/v1"),
+                    Transport = new HttpClientPipelineTransport(httpClient)
+                });
+
+            return openAiClient
+                .GetChatClient(settings.DefaultModel)
+                .AsIChatClient();
+        })
+        .UseFunctionInvocation();
     }
 
     private static void AddNotionMcp(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<NotionSettings>(configuration.GetSection(NotionSettings.SectionName));
-        services.AddSingleton<IMcpToolClient, NotionMcpClient>();
+        services.AddSingleton<IMcpToolProvider, NotionMcpClient>();
     }
 }
