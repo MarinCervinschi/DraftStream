@@ -1,35 +1,35 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using DraftStream.Application.Llm;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Prompts;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace DraftStream.Application.Workflows;
 
 public sealed class SchemaWorkflowHandler : IWorkflowHandler
 {
-    private const int _maxToolLoopIterations = 10;
-    private const string _retrieveDatabaseToolName = "notion_retrieve_database";
+    private const string _retrieveDatabaseToolName = "API-retrieve-a-database";
+    private const string _retrieveDataSourceToolName = "API-retrieve-a-data-source";
 
     private static readonly ConcurrentDictionary<string, string> _schemaCache = new();
 
-    private readonly ILlmClient _llmClient;
-    private readonly IMcpToolClient _mcpToolClient;
+    private readonly IChatClient _chatClient;
+    private readonly IMcpToolProvider _mcpToolProvider;
     private readonly WorkflowConfig _config;
     private readonly PromptBuilder _promptBuilder;
     private readonly ILogger<SchemaWorkflowHandler> _logger;
 
     public SchemaWorkflowHandler(
-        ILlmClient llmClient,
-        IMcpToolClient mcpToolClient,
+        IChatClient chatClient,
+        IMcpToolProvider mcpToolProvider,
         WorkflowConfig config,
         PromptBuilder promptBuilder,
         ILogger<SchemaWorkflowHandler> logger)
     {
-        _llmClient = llmClient;
-        _mcpToolClient = mcpToolClient;
+        _chatClient = chatClient;
+        _mcpToolProvider = mcpToolProvider;
         _config = config;
         _promptBuilder = promptBuilder;
         _logger = logger;
@@ -45,19 +45,26 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         {
             string schemaDescription = await FetchSchemaDescriptionAsync(cancellationToken);
 
+            IReadOnlyList<AITool> tools = await _mcpToolProvider.GetToolsAsync(cancellationToken);
+
             string systemPrompt = _promptBuilder.BuildSystemPrompt(
                 message.WorkflowName, _config.DatabaseId, schemaDescription);
 
-            IReadOnlyList<LlmToolDefinition> tools =
-                await _mcpToolClient.GetToolDefinitionsAsync(cancellationToken);
-
-            var messages = new List<LlmMessage>
+            var messages = new List<ChatMessage>
             {
-                new() { Role = "system", Content = systemPrompt },
-                new() { Role = "user", Content = message.Text }
+                new(ChatRole.System, systemPrompt),
+                new(ChatRole.User, message.Text)
             };
 
-            string? confirmationText = await RunToolLoopAsync(messages, tools, cancellationToken);
+            var options = new ChatOptions
+            {
+                Tools = [.. tools],
+                ModelId = _config.ModelOverride
+            };
+
+            ChatResponse response = await _chatClient.GetResponseAsync(messages, options, cancellationToken);
+
+            string confirmationText = response.Text;
 
             if (message.ReplyAsync is not null && !string.IsNullOrWhiteSpace(confirmationText))
             {
@@ -92,66 +99,6 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         }
     }
 
-    private async Task<string?> RunToolLoopAsync(
-        List<LlmMessage> messages,
-        IReadOnlyList<LlmToolDefinition> tools,
-        CancellationToken cancellationToken)
-    {
-        for (int iteration = 0; iteration < _maxToolLoopIterations; iteration++)
-        {
-            var request = new LlmRequest
-            {
-                Messages = messages,
-                Tools = tools,
-                ModelOverride = _config.ModelOverride
-            };
-
-            LlmResponse response = await _llmClient.CompleteAsync(request, cancellationToken);
-
-            if (response.ToolCalls.Count == 0)
-            {
-                return response.Content;
-            }
-
-            messages.Add(new LlmMessage
-            {
-                Role = "assistant",
-                Content = response.Content,
-                ToolCalls = response.ToolCalls
-            });
-
-            foreach (LlmToolCall toolCall in response.ToolCalls)
-            {
-                _logger.LogInformation(
-                    "Executing MCP tool '{ToolName}' (iteration {Iteration})",
-                    toolCall.FunctionName, iteration + 1);
-
-                McpToolResult result = await _mcpToolClient.CallToolAsync(
-                    toolCall.FunctionName, toolCall.ArgumentsJson, cancellationToken);
-
-                if (result.IsError)
-                {
-                    _logger.LogWarning(
-                        "MCP tool '{ToolName}' returned an error: {ErrorContent}",
-                        toolCall.FunctionName, result.Content);
-                }
-
-                messages.Add(new LlmMessage
-                {
-                    Role = "tool",
-                    Content = result.Content,
-                    ToolCallId = toolCall.Id
-                });
-            }
-        }
-
-        _logger.LogWarning(
-            "Tool loop reached maximum iterations ({MaxIterations}) without a final response",
-            _maxToolLoopIterations);
-
-        return "Your message was processed, but the response may be incomplete.";
-    }
-
     private async Task<string> FetchSchemaDescriptionAsync(CancellationToken cancellationToken)
     {
         if (_schemaCache.TryGetValue(_config.DatabaseId, out string? cached))
@@ -160,25 +107,67 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         _logger.LogInformation(
             "Fetching database schema for {DatabaseId}", _config.DatabaseId);
 
+        string dataSourceId = await FetchDataSourceIdAsync(cancellationToken);
+
+        if (string.IsNullOrEmpty(dataSourceId))
+            return "Schema not available. Use the database ID directly with the tools.";
+
+        string dataSourceArgs = JsonSerializer.Serialize(new { data_source_id = dataSourceId });
+
+        McpToolResult dataSourceResult = await _mcpToolProvider.CallToolDirectAsync(
+            _retrieveDataSourceToolName, dataSourceArgs, cancellationToken);
+
+        if (dataSourceResult.IsError)
+        {
+            _logger.LogWarning(
+                "Failed to fetch data source {DataSourceId} for database {DatabaseId}: {Error}",
+                dataSourceId, _config.DatabaseId, dataSourceResult.Content);
+            return "Schema not available. Use the database ID directly with the tools.";
+        }
+
+        string schemaDescription = PromptBuilder.FormatSchemaDescription(dataSourceResult.Content);
+        _schemaCache.TryAdd(_config.DatabaseId, schemaDescription);
+
+        _logger.LogInformation(
+            "Cached database schema for {DatabaseId} (data source {DataSourceId})",
+            _config.DatabaseId, dataSourceId);
+
+        return schemaDescription;
+    }
+
+    private async Task<string> FetchDataSourceIdAsync(CancellationToken cancellationToken)
+    {
         string argumentsJson = JsonSerializer.Serialize(new { database_id = _config.DatabaseId });
 
-        McpToolResult result = await _mcpToolClient.CallToolAsync(
+        McpToolResult result = await _mcpToolProvider.CallToolDirectAsync(
             _retrieveDatabaseToolName, argumentsJson, cancellationToken);
 
         if (result.IsError)
         {
             _logger.LogWarning(
-                "Failed to fetch schema for database {DatabaseId}: {Error}",
+                "Failed to retrieve database {DatabaseId}: {Error}",
                 _config.DatabaseId, result.Content);
-            return "Schema not available. Use the database ID directly with the tools.";
+            return string.Empty;
         }
 
-        string schemaDescription = PromptBuilder.FormatSchemaDescription(result.Content);
-        _schemaCache.TryAdd(_config.DatabaseId, schemaDescription);
+        using var doc = JsonDocument.Parse(result.Content);
 
-        _logger.LogInformation(
-            "Cached database schema for {DatabaseId}", _config.DatabaseId);
+        if (doc.RootElement.TryGetProperty("data_sources", out JsonElement dataSources)
+            && dataSources.GetArrayLength() > 0)
+        {
+            string? id = dataSources[0].GetProperty("id").GetString();
 
-        return schemaDescription;
+            if (!string.IsNullOrEmpty(id))
+            {
+                _logger.LogInformation(
+                    "Resolved data source {DataSourceId} for database {DatabaseId}",
+                    id, _config.DatabaseId);
+                return id;
+            }
+        }
+
+        _logger.LogWarning(
+            "No data sources found for database {DatabaseId}", _config.DatabaseId);
+        return string.Empty;
     }
 }
