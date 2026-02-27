@@ -56,11 +56,10 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
                 new(ChatRole.User, message.Text)
             };
 
-            var options = new ChatOptions
-            {
-                Tools = [.. tools],
-                ModelId = _config.ModelOverride
-            };
+            var options = new ChatOptions { Tools = [.. tools] };
+
+            if (!string.IsNullOrEmpty(_config.ModelOverride))
+                options.ModelId = _config.ModelOverride;
 
             ChatResponse response = await _chatClient.GetResponseAsync(messages, options, cancellationToken);
 
