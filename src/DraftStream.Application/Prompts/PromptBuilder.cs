@@ -24,9 +24,9 @@ public sealed class PromptBuilder
         ## Rules
 
         - Use the provided tools to create a new page in the database above
-        - The main content of the user's message should be stored as body content in the new page, not as a property value
+        - For the page title, use a short summary of the user's message, very concise.
+        - The main content should be stored as body content in the new page, NOT as a property value
         - Follow the istructions carefully about the content formatting and which properties to fill
-        - Fill properties based on the user's message content
         - If you cannot determine a value for a property, leave it empty rather than guessing
         - Some properties are set by the system and should not be filled in by you.
             These include "Created Time", "Last Edited Time", and any properties with "created" or "edited" in their name.
