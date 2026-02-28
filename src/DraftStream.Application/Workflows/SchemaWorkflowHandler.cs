@@ -52,7 +52,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
             IReadOnlyList<AITool> tools = await _mcpToolProvider.GetToolsAsync(cancellationToken);
 
             string systemPrompt = _promptBuilder.BuildSystemPrompt(
-                message.WorkflowName, _config.DatabaseId, schemaDescription);
+                message.WorkflowName, _config.DatabaseId, message.SourceType, schemaDescription);
 
             var messages = new List<ChatMessage>
             {

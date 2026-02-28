@@ -12,21 +12,24 @@ public sealed class PromptBuilder
         ## Notion Database Schema
 
         Database ID: {1}
+        Source: {2}
 
         The target database has the following properties:
-        {2}
+        {3}
 
         ## Workflow Instructions
 
-        {3}
+        {4}
 
         ## Rules
 
         - Use the provided tools to create a new page in the database above
+        - The main content of the user's message should be stored as body content in the new page, not as a property value
         - Fill properties based on the user's message content
-        - After creating the page, respond with a brief, human-friendly confirmation of what was stored
         - If you cannot determine a value for a property, leave it empty rather than guessing
-        - Today's date is {4}
+        - Some properties are set by the system and should not be filled in by you.
+            These include "Created Time", "Last Edited Time", and any properties with "created" or "edited" in their name.
+        - After creating the page, respond with a brief, human-friendly confirmation of what was stored, not to longer than a couple of sentences.
         """;
 
     private readonly Dictionary<string, string> _instructionCache = new();
@@ -34,12 +37,12 @@ public sealed class PromptBuilder
     public string BuildSystemPrompt(
         string workflowName,
         string databaseId,
+        string sourceType,
         string schemaDescription)
     {
         string instructions = LoadWorkflowInstructions(workflowName);
-        string today = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd (dddd)");
 
-        return string.Format(_baseTemplate, workflowName, databaseId, schemaDescription, instructions, today);
+        return string.Format(_baseTemplate, workflowName, databaseId, sourceType, schemaDescription, instructions);
     }
 
     public static string FormatSchemaDescription(string rawSchemaJson)
