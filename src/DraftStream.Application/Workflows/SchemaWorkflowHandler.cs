@@ -110,6 +110,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
             message.Text,
             message.Text,
             message.SenderName,
+            message.SourceType,
             message.WorkflowName,
             cancellationToken);
 
@@ -119,6 +120,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         bool layer3Saved = await _fallbackStorage.SaveToGeneralFallbackAsync(
             message.Text,
             message.SenderName,
+            message.SourceType,
             $"workflow:{message.WorkflowName}",
             cancellationToken);
 

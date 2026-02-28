@@ -59,7 +59,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         string sourceContext = $"workflow:{message.WorkflowName}, source:{message.SourceType}";
 
         bool saved = await _fallbackStorage.SaveToGeneralFallbackAsync(
-            message.Text, message.SenderName, sourceContext, cancellationToken);
+            message.Text, message.SenderName, message.SourceType, sourceContext, cancellationToken);
 
         if (message.ReplyAsync is null)
             return;

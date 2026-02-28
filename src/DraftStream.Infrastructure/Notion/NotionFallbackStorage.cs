@@ -30,6 +30,7 @@ public sealed class NotionFallbackStorage : IFallbackStorage
         string title,
         string messageText,
         string senderName,
+        string sourceType,
         string workflowName,
         CancellationToken cancellationToken)
     {
@@ -42,7 +43,7 @@ public sealed class NotionFallbackStorage : IFallbackStorage
             string truncatedTitle = TruncateTitle(title);
             string bodyContent = FormatPageBody(messageText, senderName, workflowName);
 
-            string argumentsJson = BuildCreatePageArguments(databaseId, truncatedTitle, bodyContent);
+            string argumentsJson = BuildCreatePageArguments(databaseId, truncatedTitle, sourceType, bodyContent);
 
             McpToolResult result = await _mcpToolProvider.CallToolDirectAsync(
                 _createPageToolName, argumentsJson, cancellationToken);
@@ -72,6 +73,7 @@ public sealed class NotionFallbackStorage : IFallbackStorage
     public async Task<bool> SaveToGeneralFallbackAsync(
         string messageText,
         string senderName,
+        string sourceType,
         string sourceContext,
         CancellationToken cancellationToken)
     {
@@ -93,7 +95,7 @@ public sealed class NotionFallbackStorage : IFallbackStorage
             string bodyContent = FormatPageBody(messageText, senderName, sourceContext);
 
             string argumentsJson = BuildCreatePageArguments(
-                _settings.GeneralDatabaseId, truncatedTitle, bodyContent);
+                _settings.GeneralDatabaseId, truncatedTitle, sourceType, bodyContent);
 
             McpToolResult result = await _mcpToolProvider.CallToolDirectAsync(
                 _createPageToolName, argumentsJson, cancellationToken);
@@ -131,7 +133,7 @@ public sealed class NotionFallbackStorage : IFallbackStorage
         $"From: {senderName}\nContext: {context}\nReceived: {DateTimeOffset.UtcNow:O}\n\n{messageText}";
 
     private static string BuildCreatePageArguments(
-        string databaseId, string title, string bodyContent)
+        string databaseId, string title, string sourceType, string bodyContent)
     {
         var arguments = new
         {
@@ -144,6 +146,10 @@ public sealed class NotionFallbackStorage : IFallbackStorage
                     {
                         new { text = new { content = title } }
                     }
+                },
+                Source = new
+                {
+                    select = new { name = sourceType }
                 }
             },
             children = new[]
