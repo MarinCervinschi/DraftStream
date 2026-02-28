@@ -121,7 +121,11 @@ public static class DependencyInjection
                     .GetChatClient(settings.DefaultModel)
                     .AsIChatClient();
             })
-            .UseFunctionInvocation();
+            .UseFunctionInvocation(loggerFactory: null, config =>
+            {
+                config.MaximumIterationsPerRequest = 10;
+                config.MaximumConsecutiveErrorsPerRequest = 3;
+            });
     }
 
     private static void AddNotionMcp(this IServiceCollection services, IConfiguration configuration)

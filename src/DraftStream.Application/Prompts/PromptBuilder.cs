@@ -25,6 +25,7 @@ public sealed class PromptBuilder
 
         - Use the provided tools to create a new page in the database above
         - The main content of the user's message should be stored as body content in the new page, not as a property value
+        - Follow the istructions carefully about the content formatting and which properties to fill
         - Fill properties based on the user's message content
         - If you cannot determine a value for a property, leave it empty rather than guessing
         - Some properties are set by the system and should not be filled in by you.
@@ -48,6 +49,8 @@ public sealed class PromptBuilder
     public static string FormatSchemaDescription(string rawSchemaJson)
     {
         var builder = new StringBuilder();
+        builder.AppendLine("IMPORTANT: Property names are case-sensitive. Use them exactly as shown (e.g. \"Status\" not \"status\").");
+        builder.AppendLine();
 
         using var doc = JsonDocument.Parse(rawSchemaJson);
 
@@ -63,9 +66,9 @@ public sealed class PromptBuilder
                 ? typeElement.GetString() ?? "unknown"
                 : "unknown";
 
-            builder.Append($"- {propertyName} ({type})");
+            builder.Append($"- \"{propertyName}\" (type: {type})");
 
-            AppendSelectOptions(builder, propertyValue, type);
+            AppendTypeHint(builder, propertyValue, type);
 
             builder.AppendLine();
         }
@@ -73,38 +76,47 @@ public sealed class PromptBuilder
         return builder.ToString().TrimEnd();
     }
 
-    private static void AppendSelectOptions(StringBuilder builder, JsonElement propertyValue, string type)
+    private static void AppendTypeHint(StringBuilder builder, JsonElement propertyValue, string type)
     {
-        string optionsProperty = type switch
+        string? optionsProperty = type switch
         {
             "select" => "select",
             "multi_select" => "multi_select",
             "status" => "status",
-            _ => ""
+            _ => null
         };
 
-        if (string.IsNullOrEmpty(optionsProperty))
+        if (optionsProperty is null)
             return;
 
-        if (!propertyValue.TryGetProperty(optionsProperty, out JsonElement selectElement))
+        if (!propertyValue.TryGetProperty(optionsProperty, out JsonElement typeElement))
             return;
 
-        if (!selectElement.TryGetProperty("options", out JsonElement optionsElement))
+        if (!typeElement.TryGetProperty("options", out JsonElement optionsElement))
             return;
 
-        var options = new List<string>();
+        var optionNames = new List<string>();
         foreach (JsonElement option in optionsElement.EnumerateArray())
         {
             if (option.TryGetProperty("name", out JsonElement nameElement))
             {
                 string? name = nameElement.GetString();
                 if (!string.IsNullOrEmpty(name))
-                    options.Add(name);
+                    optionNames.Add($"\"{name}\"");
             }
         }
 
-        if (options.Count > 0)
-            builder.Append($" — options: {string.Join(", ", options)}");
+        if (optionNames.Count == 0)
+            return;
+
+        builder.Append($" — allowed values: {string.Join(", ", optionNames)}");
+        builder.Append(type switch
+        {
+            "status" => " — format: {\"status\": {\"name\": \"<value>\"}}",
+            "select" => " — format: {\"select\": {\"name\": \"<value>\"}}",
+            "multi_select" => " — format: {\"multi_select\": [{\"name\": \"<value>\"}]}",
+            _ => ""
+        });
     }
 
     private string LoadWorkflowInstructions(string workflowName)
