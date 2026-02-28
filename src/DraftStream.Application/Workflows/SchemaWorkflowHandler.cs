@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using DraftStream.Application.Fallback;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Prompts;
@@ -19,6 +20,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
     private readonly IMcpToolProvider _mcpToolProvider;
     private readonly WorkflowConfig _config;
     private readonly PromptBuilder _promptBuilder;
+    private readonly IFallbackStorage _fallbackStorage;
     private readonly ILogger<SchemaWorkflowHandler> _logger;
 
     public SchemaWorkflowHandler(
@@ -26,12 +28,14 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         IMcpToolProvider mcpToolProvider,
         WorkflowConfig config,
         PromptBuilder promptBuilder,
+        IFallbackStorage fallbackStorage,
         ILogger<SchemaWorkflowHandler> logger)
     {
         _chatClient = chatClient;
         _mcpToolProvider = mcpToolProvider;
         _config = config;
         _promptBuilder = promptBuilder;
+        _fallbackStorage = fallbackStorage;
         _logger = logger;
     }
 
@@ -80,13 +84,13 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
                 "Failed to process '{WorkflowName}' workflow message from {SenderName}: {MessageText}",
                 message.WorkflowName, message.SenderName, message.Text);
 
+            string replyText = await AttemptFallbackSaveAsync(message, cancellationToken);
+
             if (message.ReplyAsync is not null)
             {
                 try
                 {
-                    await message.ReplyAsync(
-                        "Sorry, I couldn't process your message. Please try again.",
-                        cancellationToken);
+                    await message.ReplyAsync(replyText, cancellationToken);
                 }
                 catch (Exception replyEx)
                 {
@@ -96,6 +100,32 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
                 }
             }
         }
+    }
+
+    private async Task<string> AttemptFallbackSaveAsync(
+        IncomingMessage message, CancellationToken cancellationToken)
+    {
+        bool layer2Saved = await _fallbackStorage.SaveToWorkflowDatabaseAsync(
+            _config.DatabaseId,
+            message.Text,
+            message.Text,
+            message.SenderName,
+            message.WorkflowName,
+            cancellationToken);
+
+        if (layer2Saved)
+            return "Processing failed, but your message was saved directly to the database.";
+
+        bool layer3Saved = await _fallbackStorage.SaveToGeneralFallbackAsync(
+            message.Text,
+            message.SenderName,
+            $"workflow:{message.WorkflowName}",
+            cancellationToken);
+
+        if (layer3Saved)
+            return "Processing failed, but your message was saved to the fallback inbox.";
+
+        return "Sorry, I couldn't process your message and saving it failed too. Please try again.";
     }
 
     private async Task<string> FetchSchemaDescriptionAsync(CancellationToken cancellationToken)

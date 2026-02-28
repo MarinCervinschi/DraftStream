@@ -1,6 +1,7 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using DraftStream.Application;
+using DraftStream.Application.Fallback;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Prompts;
@@ -27,11 +28,18 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDraftStreamOpenTelemetry();
+        services.AddFallbackStorage(configuration);
         services.AddWorkflowHandlers(configuration);
         services.AddMessaging(configuration);
         services.AddLlmClient(configuration);
         services.AddNotionMcp(configuration);
         return services;
+    }
+
+    private static void AddFallbackStorage(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<FallbackSettings>(configuration.GetSection(FallbackSettings.SectionName));
+        services.AddSingleton<IFallbackStorage, NotionFallbackStorage>();
     }
 
     private static void AddMessaging(this IServiceCollection services, IConfiguration configuration)
@@ -69,6 +77,7 @@ public static class DependencyInjection
                     sp.GetRequiredService<IMcpToolProvider>(),
                     config,
                     sp.GetRequiredService<PromptBuilder>(),
+                    sp.GetRequiredService<IFallbackStorage>(),
                     sp.GetRequiredService<ILogger<SchemaWorkflowHandler>>()));
         }
     }
