@@ -1,10 +1,10 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using DraftStream.Application.Fallback;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Prompts;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace DraftStream.Application.Workflows;
@@ -14,13 +14,14 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
     private const string _retrieveDatabaseToolName = "API-retrieve-a-database";
     private const string _retrieveDataSourceToolName = "API-retrieve-a-data-source";
 
-    private static readonly ConcurrentDictionary<string, string> _schemaCache = new();
+    private static readonly TimeSpan _schemaCacheDuration = TimeSpan.FromMinutes(30);
 
     private readonly IChatClient _chatClient;
     private readonly IMcpToolProvider _mcpToolProvider;
     private readonly WorkflowConfig _config;
     private readonly PromptBuilder _promptBuilder;
     private readonly IFallbackStorage _fallbackStorage;
+    private readonly IMemoryCache _schemaCache;
     private readonly ILogger<SchemaWorkflowHandler> _logger;
 
     public SchemaWorkflowHandler(
@@ -29,6 +30,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         WorkflowConfig config,
         PromptBuilder promptBuilder,
         IFallbackStorage fallbackStorage,
+        IMemoryCache schemaCache,
         ILogger<SchemaWorkflowHandler> logger)
     {
         _chatClient = chatClient;
@@ -36,6 +38,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         _config = config;
         _promptBuilder = promptBuilder;
         _fallbackStorage = fallbackStorage;
+        _schemaCache = schemaCache;
         _logger = logger;
     }
 
@@ -121,8 +124,10 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
 
     private async Task<string> FetchSchemaDescriptionAsync(CancellationToken cancellationToken)
     {
-        if (_schemaCache.TryGetValue(_config.DatabaseId, out string? cached))
-            return cached;
+        string cacheKey = $"schema:{_config.DatabaseId}";
+
+        if (_schemaCache.TryGetValue(cacheKey, out string? cached))
+            return cached!;
 
         _logger.LogInformation(
             "Fetching database schema for {DatabaseId}", _config.DatabaseId);
@@ -146,11 +151,12 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         }
 
         string schemaDescription = PromptBuilder.FormatSchemaDescription(dataSourceResult.Content);
-        _schemaCache.TryAdd(_config.DatabaseId, schemaDescription);
+
+        _schemaCache.Set(cacheKey, schemaDescription, _schemaCacheDuration);
 
         _logger.LogInformation(
-            "Cached database schema for {DatabaseId} (data source {DataSourceId})",
-            _config.DatabaseId, dataSourceId);
+            "Cached database schema for {DatabaseId} (data source {DataSourceId}, TTL {CacheTtlMinutes} min)",
+            _config.DatabaseId, dataSourceId, _schemaCacheDuration.TotalMinutes);
 
         return schemaDescription;
     }

@@ -12,6 +12,7 @@ using DraftStream.Infrastructure.Observability;
 using DraftStream.Infrastructure.OpenRouter;
 using DraftStream.Infrastructure.Telegram;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddMemoryCache();
         services.AddDraftStreamOpenTelemetry();
         services.AddFallbackStorage();
         services.AddWorkflowHandlers(configuration);
@@ -76,6 +78,7 @@ public static class DependencyInjection
                     config,
                     sp.GetRequiredService<PromptBuilder>(),
                     sp.GetRequiredService<IFallbackStorage>(),
+                    sp.GetRequiredService<IMemoryCache>(),
                     sp.GetRequiredService<ILogger<SchemaWorkflowHandler>>()));
         }
     }
