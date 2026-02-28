@@ -29,10 +29,16 @@ DraftStream/
 ├── src/
 │   ├── DraftStream.Domain/              # Enums, value objects
 │   ├── DraftStream.Application/         # Interfaces, workflows, prompts, shared contracts
+│   │   ├── Fallback/                    # IFallbackStorage
 │   │   ├── Mcp/                         # IMcpToolProvider, McpToolResult
+│   │   ├── Messaging/                   # IMessageSource, IMessageDispatcher, IncomingMessage
 │   │   ├── Workflows/                   # SchemaWorkflowHandler, WorkflowSettings
 │   │   └── Prompts/                     # PromptBuilder, notes.md, tasks.md, snippets.md
 │   ├── DraftStream.Infrastructure/      # Infisical, Serilog, OpenTelemetry, external integrations
+│   │   ├── Messaging/                   # MessageDispatcher, MessageSourceBackgroundService
+│   │   ├── Notion/                      # NotionMcpClient, NotionFallbackStorage
+│   │   ├── OpenRouter/                  # OpenRouterSettings
+│   │   └── Telegram/                    # TelegramMessageSource, TelegramSettings
 │   └── DraftStream.Host/               # Composition root (worker service)
 ├── Directory.Build.props                # Shared build properties
 ├── Dockerfile                           # Multi-stage build
@@ -125,7 +131,7 @@ The MCP server process starts lazily on first use and reconnects automatically o
 
 ## Workflow Configuration
 
-Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under `Workflows:Items`. The handler dynamically fetches the Notion database schema via a two-step MCP call (database → data source) — **no code changes needed** when you add or remove database columns.
+Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under `Workflows:Items`. The handler dynamically fetches the Notion database schema via a two-step MCP call (database → data source) — **no code changes needed** when you add or remove database columns. Schemas are cached for 30 minutes and automatically refetched after expiry.
 
 | Setting | Location | Description |
 |---|---|---|
@@ -145,8 +151,13 @@ Example:
 }
 ```
 
+## Fallback Storage
+
+If the LLM workflow fails (model error, MCP timeout, etc.), the system automatically saves the raw message directly to the Notion database via the `API-post-page` MCP tool — bypassing the LLM entirely. The user receives a reply indicating whether the fallback save succeeded or not. This ensures no messages are lost even during outages.
+
 ## Current Status
 
+- **Post-Phase 7** — Schema cache upgraded from static `ConcurrentDictionary` to `IMemoryCache` with 30-minute TTL. Notion schema changes are picked up automatically without app restart. Added fallback storage (`IFallbackStorage` / `NotionFallbackStorage`) to save raw messages directly to Notion when LLM processing fails, with `sourceType` context propagation across the pipeline.
 - **Phase 7** — Replaced manual agentic tool loop with `Microsoft.Extensions.AI` SDK integration. `IChatClient` with `FunctionInvokingChatClient` middleware handles tool invocation automatically. `McpClientTool` (inherits `AIFunction`) plugs directly into `ChatOptions.Tools`. Removed ~400 lines of custom LLM client, API models, and tool loop code. Updated Notion MCP schema fetch to two-step data source flow (`API-retrieve-a-database` → `API-retrieve-a-data-source`).
 - **Phases 4-6** — Schema-driven workflow engine. Single generic handler for all workflows (Notes, Tasks, Snippets). Dynamically fetches Notion database schema, injects it into the LLM prompt, and lets the LLM fill properties based on actual columns. Reply mechanism for confirmation messages. Zero code changes when Notion schema changes.
 - **Phase 3** — Notion MCP client via `ModelContextProtocol` SDK. Spawns `@notionhq/notion-mcp-server` as stdio child process. Lazy init, thread-safe, reconnect-on-failure, tool caching. OpenTelemetry tracing on MCP operations.
