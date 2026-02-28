@@ -79,10 +79,10 @@ public sealed class TelegramMessageSource : IMessageSource
 
         if (workflowName is null)
         {
-            _logger.LogInformation(
-                "No workflow mapping for topic thread {ThreadId} in group {GroupId}, routing to fallback",
+            _logger.LogWarning(
+                "No workflow mapping for topic thread {ThreadId} in group {GroupId}",
                 message.MessageThreadId, _settings.GroupId);
-            workflowName = $"__unmapped_topic_{message.MessageThreadId}";
+            return;
         }
 
         activity?.SetTag("workflow", workflowName);

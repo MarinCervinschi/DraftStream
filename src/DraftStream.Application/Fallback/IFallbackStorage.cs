@@ -10,11 +10,4 @@ public interface IFallbackStorage
         string sourceType,
         string workflowName,
         CancellationToken cancellationToken);
-
-    Task<bool> SaveToGeneralFallbackAsync(
-        string messageText,
-        string senderName,
-        string sourceType,
-        string sourceContext,
-        CancellationToken cancellationToken);
 }

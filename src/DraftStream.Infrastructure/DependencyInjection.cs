@@ -28,7 +28,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDraftStreamOpenTelemetry();
-        services.AddFallbackStorage(configuration);
+        services.AddFallbackStorage();
         services.AddWorkflowHandlers(configuration);
         services.AddMessaging(configuration);
         services.AddLlmClient(configuration);
@@ -36,11 +36,8 @@ public static class DependencyInjection
         return services;
     }
 
-    private static void AddFallbackStorage(this IServiceCollection services, IConfiguration configuration)
-    {
-        services.Configure<FallbackSettings>(configuration.GetSection(FallbackSettings.SectionName));
+    private static void AddFallbackStorage(this IServiceCollection services) =>
         services.AddSingleton<IFallbackStorage, NotionFallbackStorage>();
-    }
 
     private static void AddMessaging(this IServiceCollection services, IConfiguration configuration)
     {
@@ -61,7 +58,8 @@ public static class DependencyInjection
 
         if (workflowSettings.Items.Count == 0)
         {
-            Console.WriteLine("[WRN] No workflow configurations found under Workflows:Items. No handlers will be registered.");
+            Console.WriteLine(
+                "[WRN] No workflow configurations found under Workflows:Items. No handlers will be registered.");
         }
 
         foreach (KeyValuePair<string, WorkflowConfig> entry in workflowSettings.Items)
@@ -103,24 +101,24 @@ public static class DependencyInjection
             });
 
         services.AddChatClient(sp =>
-        {
-            OpenRouterSettings settings = sp.GetRequiredService<IOptions<OpenRouterSettings>>().Value;
-            IHttpClientFactory httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-            HttpClient httpClient = httpClientFactory.CreateClient("OpenRouter");
+            {
+                OpenRouterSettings settings = sp.GetRequiredService<IOptions<OpenRouterSettings>>().Value;
+                IHttpClientFactory httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                HttpClient httpClient = httpClientFactory.CreateClient("OpenRouter");
 
-            var openAiClient = new OpenAIClient(
-                new ApiKeyCredential(settings.ApiKey),
-                new OpenAIClientOptions
-                {
-                    Endpoint = new Uri("https://openrouter.ai/api/v1"),
-                    Transport = new HttpClientPipelineTransport(httpClient)
-                });
+                var openAiClient = new OpenAIClient(
+                    new ApiKeyCredential(settings.ApiKey),
+                    new OpenAIClientOptions
+                    {
+                        Endpoint = new Uri("https://openrouter.ai/api/v1"),
+                        Transport = new HttpClientPipelineTransport(httpClient)
+                    });
 
-            return openAiClient
-                .GetChatClient(settings.DefaultModel)
-                .AsIChatClient();
-        })
-        .UseFunctionInvocation();
+                return openAiClient
+                    .GetChatClient(settings.DefaultModel)
+                    .AsIChatClient();
+            })
+            .UseFunctionInvocation();
     }
 
     private static void AddNotionMcp(this IServiceCollection services, IConfiguration configuration)

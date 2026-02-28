@@ -105,7 +105,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
     private async Task<string> AttemptFallbackSaveAsync(
         IncomingMessage message, CancellationToken cancellationToken)
     {
-        bool layer2Saved = await _fallbackStorage.SaveToWorkflowDatabaseAsync(
+        bool saved = await _fallbackStorage.SaveToWorkflowDatabaseAsync(
             _config.DatabaseId,
             message.Text,
             message.Text,
@@ -114,20 +114,9 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
             message.WorkflowName,
             cancellationToken);
 
-        if (layer2Saved)
-            return "Processing failed, but your message was saved directly to the database.";
-
-        bool layer3Saved = await _fallbackStorage.SaveToGeneralFallbackAsync(
-            message.Text,
-            message.SenderName,
-            message.SourceType,
-            $"workflow:{message.WorkflowName}",
-            cancellationToken);
-
-        if (layer3Saved)
-            return "Processing failed, but your message was saved to the fallback inbox.";
-
-        return "Sorry, I couldn't process your message and saving it failed too. Please try again.";
+        return saved
+            ? "Processing failed, but your message was saved directly to the database."
+            : "Sorry, I couldn't process your message and saving it failed too. Please try again.";
     }
 
     private async Task<string> FetchSchemaDescriptionAsync(CancellationToken cancellationToken)
