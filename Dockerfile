@@ -11,6 +11,7 @@ COPY src/ src/
 RUN dotnet publish src/DraftStream.Host -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/runtime:9.0-alpine AS runtime
+RUN apk add --no-cache nodejs npm
 RUN adduser -D appuser
 USER appuser
 WORKDIR /app
