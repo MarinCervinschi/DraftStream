@@ -31,7 +31,8 @@
       "WebFetch(domain:csharp.sdk.modelcontextprotocol.io)",
       "WebFetch(domain:markheath.net)",
       "WebFetch(domain:dev.to)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(dotnet:*)"
     ]
   }
 }

@@ -1,11 +1,7 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS restore
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS restore
 WORKDIR /src
 COPY Directory.Build.props DraftStream.sln ./
-COPY src/DraftStream.Domain/DraftStream.Domain.csproj src/DraftStream.Domain/
 COPY src/DraftStream.Application/DraftStream.Application.csproj src/DraftStream.Application/
-COPY src/DraftStream.Application.Notes/DraftStream.Application.Notes.csproj src/DraftStream.Application.Notes/
-COPY src/DraftStream.Application.Tasks/DraftStream.Application.Tasks.csproj src/DraftStream.Application.Tasks/
-COPY src/DraftStream.Application.Snippets/DraftStream.Application.Snippets.csproj src/DraftStream.Application.Snippets/
 COPY src/DraftStream.Infrastructure/DraftStream.Infrastructure.csproj src/DraftStream.Infrastructure/
 COPY src/DraftStream.Host/DraftStream.Host.csproj src/DraftStream.Host/
 RUN dotnet restore

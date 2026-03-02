@@ -1,5 +1,6 @@
 services:
   app:
+    restart: always
     build: .
     depends_on:
       - seq
@@ -9,6 +10,7 @@ services:
       - Serilog__WriteTo__1__Args__serverUrl=http://seq:5341
 
   seq:
+    restart: always
     image: datalust/seq:latest
     ports:
       - "5341:80"
