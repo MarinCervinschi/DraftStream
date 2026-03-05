@@ -1,4 +1,3 @@
-using System.Text.Json;
 using DraftStream.Application.Fallback;
 using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
@@ -11,17 +10,20 @@ namespace DraftStream.Application.Workflows;
 
 public sealed class SchemaWorkflowHandler : IWorkflowHandler
 {
-    private const string _retrieveDatabaseToolName = "API-retrieve-a-database";
-    private const string _retrieveDataSourceToolName = "API-retrieve-a-data-source";
+    private static readonly TimeSpan _toolCacheDuration = TimeSpan.FromMinutes(30);
 
-    private static readonly TimeSpan _schemaCacheDuration = TimeSpan.FromMinutes(30);
+    private static readonly HashSet<string> _cacheableToolNames = new(StringComparer.Ordinal)
+    {
+        "API-retrieve-a-database",
+        "API-retrieve-a-data-source"
+    };
 
     private readonly IChatClient _chatClient;
     private readonly IMcpToolProvider _mcpToolProvider;
     private readonly WorkflowConfig _config;
     private readonly PromptBuilder _promptBuilder;
     private readonly IFallbackStorage _fallbackStorage;
-    private readonly IMemoryCache _schemaCache;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<SchemaWorkflowHandler> _logger;
 
     public SchemaWorkflowHandler(
@@ -30,7 +32,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         WorkflowConfig config,
         PromptBuilder promptBuilder,
         IFallbackStorage fallbackStorage,
-        IMemoryCache schemaCache,
+        IMemoryCache cache,
         ILogger<SchemaWorkflowHandler> logger)
     {
         _chatClient = chatClient;
@@ -38,7 +40,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         _config = config;
         _promptBuilder = promptBuilder;
         _fallbackStorage = fallbackStorage;
-        _schemaCache = schemaCache;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -50,12 +52,11 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
 
         try
         {
-            string schemaDescription = await FetchSchemaDescriptionAsync(cancellationToken);
-
             IReadOnlyList<AITool> tools = await _mcpToolProvider.GetToolsAsync(cancellationToken);
+            IList<AITool> wrappedTools = WrapCacheableTools(tools);
 
             string systemPrompt = _promptBuilder.BuildSystemPrompt(
-                message.WorkflowName, _config.DatabaseId, message.SourceType, schemaDescription);
+                message.WorkflowName, _config.DatabaseId, message.SourceType);
 
             var messages = new List<ChatMessage>
             {
@@ -63,7 +64,7 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
                 new(ChatRole.User, message.Text)
             };
 
-            var options = new ChatOptions { Tools = [.. tools] };
+            var options = new ChatOptions { Tools = [.. wrappedTools] };
 
             if (!string.IsNullOrEmpty(_config.ModelOverride))
                 options.ModelId = _config.ModelOverride;
@@ -122,78 +123,18 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
             : "Sorry, I couldn't process your message and saving it failed too. Please try again.";
     }
 
-    private async Task<string> FetchSchemaDescriptionAsync(CancellationToken cancellationToken)
+    private IList<AITool> WrapCacheableTools(IReadOnlyList<AITool> tools)
     {
-        string cacheKey = $"schema:{_config.DatabaseId}";
+        var result = new List<AITool>(tools.Count);
 
-        if (_schemaCache.TryGetValue(cacheKey, out string? cached))
-            return cached!;
-
-        _logger.LogInformation(
-            "Fetching database schema for {DatabaseId}", _config.DatabaseId);
-
-        string dataSourceId = await FetchDataSourceIdAsync(cancellationToken);
-
-        if (string.IsNullOrEmpty(dataSourceId))
-            return "Schema not available. Use the database ID directly with the tools.";
-
-        string dataSourceArgs = JsonSerializer.Serialize(new { data_source_id = dataSourceId });
-
-        McpToolResult dataSourceResult = await _mcpToolProvider.CallToolDirectAsync(
-            _retrieveDataSourceToolName, dataSourceArgs, cancellationToken);
-
-        if (dataSourceResult.IsError)
+        foreach (AITool tool in tools)
         {
-            _logger.LogWarning(
-                "Failed to fetch data source {DataSourceId} for database {DatabaseId}: {Error}",
-                dataSourceId, _config.DatabaseId, dataSourceResult.Content);
-            return "Schema not available. Use the database ID directly with the tools.";
+            if (tool is AIFunction function && _cacheableToolNames.Contains(function.Name))
+                result.Add(new CachingAiFunction(function, _cache, _toolCacheDuration));
+            else
+                result.Add(tool);
         }
 
-        string schemaDescription = PromptBuilder.FormatSchemaDescription(dataSourceResult.Content);
-
-        _schemaCache.Set(cacheKey, schemaDescription, _schemaCacheDuration);
-
-        _logger.LogInformation(
-            "Cached database schema for {DatabaseId} (data source {DataSourceId}, TTL {CacheTtlMinutes} min)",
-            _config.DatabaseId, dataSourceId, _schemaCacheDuration.TotalMinutes);
-
-        return schemaDescription;
-    }
-
-    private async Task<string> FetchDataSourceIdAsync(CancellationToken cancellationToken)
-    {
-        string argumentsJson = JsonSerializer.Serialize(new { database_id = _config.DatabaseId });
-
-        McpToolResult result = await _mcpToolProvider.CallToolDirectAsync(
-            _retrieveDatabaseToolName, argumentsJson, cancellationToken);
-
-        if (result.IsError)
-        {
-            _logger.LogWarning(
-                "Failed to retrieve database {DatabaseId}: {Error}",
-                _config.DatabaseId, result.Content);
-            return string.Empty;
-        }
-
-        using var doc = JsonDocument.Parse(result.Content);
-
-        if (doc.RootElement.TryGetProperty("data_sources", out JsonElement dataSources)
-            && dataSources.GetArrayLength() > 0)
-        {
-            string? id = dataSources[0].GetProperty("id").GetString();
-
-            if (!string.IsNullOrEmpty(id))
-            {
-                _logger.LogInformation(
-                    "Resolved data source {DataSourceId} for database {DatabaseId}",
-                    id, _config.DatabaseId);
-                return id;
-            }
-        }
-
-        _logger.LogWarning(
-            "No data sources found for database {DatabaseId}", _config.DatabaseId);
-        return string.Empty;
+        return result;
     }
 }
