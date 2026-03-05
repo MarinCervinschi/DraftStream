@@ -21,7 +21,7 @@ DraftStream is a .NET 9 AI agent that captures notes, tasks, and code snippets f
 - **Microsoft.Extensions.AI.OpenAI** — `IChatClient` adapter for OpenAI-compatible endpoints (OpenRouter)
 - **OpenRouter API** — OpenAI-compatible REST API for LLM (targeting free/cheap models)
 - **ModelContextProtocol SDK for .NET** — MCP client (`McpClientTool` inherits `AIFunction`, plugs directly into `IChatClient`)
-- **Microsoft.Extensions.Caching.Memory** — `IMemoryCache` for schema caching with TTL-based expiration
+- **Microsoft.Extensions.Caching.Memory** — `IMemoryCache` for tool result caching with TTL-based expiration
 - **Notion MCP Server** — official Notion MCP server (`@notionhq/notion-mcp-server`, runs as stdio, local/deprecated package)
 
 ## Project Structure
@@ -30,7 +30,7 @@ DraftStream is a .NET 9 AI agent that captures notes, tasks, and code snippets f
 src/DraftStream.Domain              — enums, value objects (no dependencies)
 src/DraftStream.Application         — interfaces, shared contracts, workflows, prompts (→ Domain)
   Fallback/                         — IFallbackStorage
-  Mcp/                              — IMcpToolProvider, McpToolResult
+  Mcp/                              — IMcpToolProvider, McpToolResult, CachingAiFunction
   Messaging/                        — IMessageSource, IMessageDispatcher, IncomingMessage
   Workflows/                        — SchemaWorkflowHandler, WorkflowSettings, WorkflowConfig
   Prompts/                          — PromptBuilder, notes.md, tasks.md, snippets.md (embedded resources)
@@ -71,13 +71,13 @@ After completing each implementation phase, update:
 ## Key Design Decisions
 
 - **Message source abstraction** — `IMessageSource` in Application, implementations in Infrastructure. `MessageSourceBackgroundService` starts all registered sources. Adding a new source = implement `IMessageSource` + register in DI.
-- **Schema-driven workflows** — A single `SchemaWorkflowHandler` handles all workflows (Notes, Tasks, Snippets). On first message, it fetches the Notion database schema via a two-step MCP call (`API-retrieve-a-database` → extract data source ID → `API-retrieve-a-data-source`), injects properties into the LLM prompt, and lets the LLM dynamically fill them. Schema is cached in `IMemoryCache` with a 30-minute TTL (auto-refetched after expiry). Adding/removing Notion columns requires zero code changes — the schema refreshes automatically.
+- **Schema-driven workflows** — A single `SchemaWorkflowHandler` handles all workflows (Notes, Tasks, Snippets). The LLM discovers the Notion database schema itself by calling read-only MCP tools (`API-retrieve-a-database` → `API-retrieve-a-data-source`) during the conversation, seeing raw JSON responses for accurate property formatting. Read-only schema tools are wrapped with `CachingAiFunction` (extends `DelegatingAIFunction`) which caches tool results in `IMemoryCache` with a 30-minute TTL. Adding/removing Notion columns requires zero code changes — the LLM sees the current schema on each conversation.
 - **Fallback storage** — If the LLM workflow fails (e.g., model error, MCP timeout), `IFallbackStorage` saves the raw message directly to the Notion database via the `API-post-page` MCP tool, bypassing the LLM entirely. `NotionFallbackStorage` in Infrastructure implements this. The user gets a reply indicating whether the fallback save succeeded or failed.
 - **Workflow configuration** — Each workflow is configured via `Workflows:Items:<name>` in appsettings.json with `DatabaseId` and optional `ModelOverride`. Handlers are registered as keyed scoped services and resolved by workflow name in `MessageDispatcher` (one DI scope per message).
 - **SDK-managed tool loop** — The `FunctionInvokingChatClient` middleware from `Microsoft.Extensions.AI` handles the agentic tool loop automatically. `McpClientTool` objects (which inherit from `AIFunction`) are passed as `ChatOptions.Tools` — when the LLM requests tool calls, the middleware invokes them and feeds results back until the LLM gives a final text response. No manual loop code needed.
 - **Reply mechanism** — `IncomingMessage.ReplyAsync` callback set by the message source. The handler calls it to send confirmation messages back to the user without knowing the transport.
 - **LLM client** — `IChatClient` from `Microsoft.Extensions.AI` registered via DI. The pipeline: `OpenAIClient` (pointing at OpenRouter endpoint) → `AsIChatClient()` → `UseFunctionInvocation()`. HTTP resilience (Polly v8: retry on 429/5xx, circuit breaker, timeouts) is configured on the underlying `HttpClient` via `IHttpClientFactory`.
-- **MCP tool provider** — `IMcpToolProvider` in Application with `GetToolsAsync` (returns `AITool` instances) and `CallToolDirectAsync` (for pre-conversation tool calls like schema fetch). `NotionMcpClient` in Infrastructure spawns `npx @notionhq/notion-mcp-server` as a stdio child process via the `ModelContextProtocol` SDK. Lazy initialization (on first use), thread-safe via `SemaphoreSlim`, reconnect-on-failure with one retry, tools cached after first fetch. Registered as singleton; implements `IAsyncDisposable` for clean process shutdown. Requires Node.js/npx on the host.
+- **MCP tool provider** — `IMcpToolProvider` in Application with `GetToolsAsync` (returns `AITool` instances) and `CallToolDirectAsync` (for direct tool calls like fallback storage). `NotionMcpClient` in Infrastructure spawns `npx @notionhq/notion-mcp-server` as a stdio child process via the `ModelContextProtocol` SDK. Lazy initialization (on first use), thread-safe via `SemaphoreSlim`, reconnect-on-failure with one retry, tools cached after first fetch. Registered as singleton; implements `IAsyncDisposable` for clean process shutdown. Requires Node.js/npx on the host.
 - OpenRouter is used instead of direct model APIs to access free-tier models and easily switch between them.
 - Each panel/workflow can override the default LLM model if needed.
 - The LLM's job is simple structured extraction (text → JSON properties), so small/free models suffice.

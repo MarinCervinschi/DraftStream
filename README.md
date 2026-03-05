@@ -30,7 +30,7 @@ DraftStream/
 │   ├── DraftStream.Domain/              # Enums, value objects
 │   ├── DraftStream.Application/         # Interfaces, workflows, prompts, shared contracts
 │   │   ├── Fallback/                    # IFallbackStorage
-│   │   ├── Mcp/                         # IMcpToolProvider, McpToolResult
+│   │   ├── Mcp/                         # IMcpToolProvider, McpToolResult, CachingAiFunction
 │   │   ├── Messaging/                   # IMessageSource, IMessageDispatcher, IncomingMessage
 │   │   ├── Workflows/                   # SchemaWorkflowHandler, WorkflowSettings
 │   │   └── Prompts/                     # PromptBuilder, notes.md, tasks.md, snippets.md
@@ -131,7 +131,7 @@ The MCP server process starts lazily on first use and reconnects automatically o
 
 ## Workflow Configuration
 
-Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under `Workflows:Items`. The handler dynamically fetches the Notion database schema via a two-step MCP call (database → data source) — **no code changes needed** when you add or remove database columns. Schemas are cached for 30 minutes and automatically refetched after expiry.
+Each workflow (Notes, Tasks, Snippets) is configured in `appsettings.json` under `Workflows:Items`. The LLM discovers the Notion database schema itself by calling read-only MCP tools (`API-retrieve-a-database` → `API-retrieve-a-data-source`) during the conversation. These tool results are transparently cached for 30 minutes via `CachingAiFunction` — **no code changes needed** when you add or remove database columns.
 
 | Setting | Location | Description |
 |---|---|---|
@@ -157,6 +157,7 @@ If the LLM workflow fails (model error, MCP timeout, etc.), the system automatic
 
 ## Current Status
 
+- **Post-Phase 8** — Replaced manual schema pre-fetch/parse with LLM-driven schema discovery. The LLM now calls read-only MCP tools itself (seeing raw JSON responses for better accuracy). `CachingAiFunction` (via `DelegatingAIFunction`) transparently caches tool results in `IMemoryCache` with 30-minute TTL. Removed `FormatSchemaDescription`/`AppendTypeHint` from `PromptBuilder` and schema fetch methods from `SchemaWorkflowHandler`.
 - **Post-Phase 7** — Schema cache upgraded from static `ConcurrentDictionary` to `IMemoryCache` with 30-minute TTL. Notion schema changes are picked up automatically without app restart. Added fallback storage (`IFallbackStorage` / `NotionFallbackStorage`) to save raw messages directly to Notion when LLM processing fails, with `sourceType` context propagation across the pipeline.
 - **Phase 7** — Replaced manual agentic tool loop with `Microsoft.Extensions.AI` SDK integration. `IChatClient` with `FunctionInvokingChatClient` middleware handles tool invocation automatically. `McpClientTool` (inherits `AIFunction`) plugs directly into `ChatOptions.Tools`. Removed ~400 lines of custom LLM client, API models, and tool loop code. Updated Notion MCP schema fetch to two-step data source flow (`API-retrieve-a-database` → `API-retrieve-a-data-source`).
 - **Phases 4-6** — Schema-driven workflow engine. Single generic handler for all workflows (Notes, Tasks, Snippets). Dynamically fetches Notion database schema, injects it into the LLM prompt, and lets the LLM fill properties based on actual columns. Reply mechanism for confirmation messages. Zero code changes when Notion schema changes.
