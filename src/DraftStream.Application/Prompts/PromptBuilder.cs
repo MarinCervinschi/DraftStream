@@ -6,36 +6,39 @@ public sealed class PromptBuilder
 {
     private const string _baseTemplate = """
                                          You are processing a message for the "{0}" workflow.
+                                         Database ID: {1} | Source: {2}
 
-                                         ## Notion Database
+                                         ## Steps
 
-                                         Database ID: {1}
-                                         Source: {2}
+                                         1. Discover the schema:
+                                            - Call `API-retrieve-a-database` with database ID → extract the first `data_sources` ID
+                                            - Call `API-retrieve-a-data-source` with that ID → read property names, types, and allowed values
+                                         2. Call `API-post-page` to create the page. The JSON argument must contain:
+                                            - `parent`: `{{ "database_id": "<id>" }}`
+                                            - `properties`: match each property name (case-sensitive) and type from the schema exactly
+                                            - `children`: array of block objects for body content (paragraph or code blocks)
+                                         3. Reply with a short confirmation (1-2 sentences max).
 
-                                         ## Schema Discovery
+                                         ## Property type reference
 
-                                         IMPORTANT: Before creating any page, you MUST first discover the database schema:
-                                         1. Call `API-retrieve-a-database` with the database ID above
-                                         2. From the response, extract the first data source ID from the `data_sources` array
-                                         3. Call `API-retrieve-a-data-source` with that data source ID to get the full schema
-                                         4. Use the schema response to correctly structure properties when creating the page
+                                         title → `{{ "title": [{{ "text": {{ "content": "..." }} }}] }}`
+                                         rich_text → `{{ "rich_text": [{{ "text": {{ "content": "..." }} }}] }}`
+                                         select → `{{ "select": {{ "name": "..." }} }}`
+                                         multi_select → `{{ "multi_select": [{{ "name": "..." }}] }}`
+                                         date → `{{ "date": {{ "start": "YYYY-MM-DD" }} }}`
+                                         checkbox → `{{ "checkbox": true }}`
+                                         status → `{{ "status": {{ "name": "..." }} }}` (use an allowed value from the schema)
 
-                                         Pay close attention to property types and formats. Use exact property names (case-sensitive) and value formats.
+                                         ## Rules
+
+                                         - Page title: short summary of the user's message
+                                         - Main content goes in `children` blocks, NOT in properties
+                                         - Skip system-managed properties (Created Time, Last Edited Time, etc.)
+                                         - Leave unknown property values empty rather than guessing
 
                                          ## Workflow Instructions
 
                                          {3}
-
-                                         ## Rules
-
-                                         - Use the provided tools to create a new page in the database above
-                                         - For the page title, use a short summary of the user's message, very concise.
-                                         - The main content should be stored as body content in the new page, NOT as a property value
-                                         - Follow the instructions carefully about the content formatting and which properties to fill
-                                         - If you cannot determine a value for a property, leave it empty rather than guessing
-                                         - Some properties are set by the system and should not be filled in by you.
-                                             These include "Created Time", "Last Edited Time", and any properties with "created" or "edited" in their name.
-                                         - After creating the page, respond with a brief, human-friendly confirmation of what was stored, not to longer than a couple of sentences.
                                          """;
 
     private readonly Dictionary<string, string> _instructionCache = new();
