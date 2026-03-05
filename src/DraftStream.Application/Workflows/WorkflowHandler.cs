@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DraftStream.Application.Workflows;
 
-public sealed class SchemaWorkflowHandler : IWorkflowHandler
+public sealed class WorkflowHandler : IWorkflowHandler
 {
     private static readonly TimeSpan _toolCacheDuration = TimeSpan.FromMinutes(30);
 
@@ -24,16 +24,16 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
     private readonly PromptBuilder _promptBuilder;
     private readonly IFallbackStorage _fallbackStorage;
     private readonly IMemoryCache _cache;
-    private readonly ILogger<SchemaWorkflowHandler> _logger;
+    private readonly ILogger<WorkflowHandler> _logger;
 
-    public SchemaWorkflowHandler(
+    public WorkflowHandler(
         IChatClient chatClient,
         IMcpToolProvider mcpToolProvider,
         WorkflowConfig config,
         PromptBuilder promptBuilder,
         IFallbackStorage fallbackStorage,
         IMemoryCache cache,
-        ILogger<SchemaWorkflowHandler> logger)
+        ILogger<WorkflowHandler> logger)
     {
         _chatClient = chatClient;
         _mcpToolProvider = mcpToolProvider;

@@ -72,14 +72,14 @@ public static class DependencyInjection
             Console.WriteLine($"[INF] Registering workflow handler '{workflowName}'");
 
             services.AddKeyedScoped<IWorkflowHandler>(workflowName, (sp, _) =>
-                new SchemaWorkflowHandler(
+                new WorkflowHandler(
                     sp.GetRequiredService<IChatClient>(),
                     sp.GetRequiredService<IMcpToolProvider>(),
                     config,
                     sp.GetRequiredService<PromptBuilder>(),
                     sp.GetRequiredService<IFallbackStorage>(),
                     sp.GetRequiredService<IMemoryCache>(),
-                    sp.GetRequiredService<ILogger<SchemaWorkflowHandler>>()));
+                    sp.GetRequiredService<ILogger<WorkflowHandler>>()));
         }
     }
 
