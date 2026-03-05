@@ -8,7 +8,7 @@ namespace DraftStream.Infrastructure.Notion;
 public sealed class NotionFallbackStorage : IFallbackStorage
 {
     private const string _createPageToolName = "API-post-page";
-    private const string _title = "Fallback Message";
+    private const int _maxTitleLength = 30;
 
     private readonly IMcpToolProvider _mcpToolProvider;
     private readonly ILogger<NotionFallbackStorage> _logger;
@@ -35,9 +35,10 @@ public sealed class NotionFallbackStorage : IFallbackStorage
 
         try
         {
+            string title = BuildTitle(messageText);
             string bodyContent = FormatPageBody(messageText, senderName, workflowName);
 
-            string argumentsJson = BuildCreatePageArguments(databaseId, _title, sourceType, bodyContent);
+            string argumentsJson = BuildCreatePageArguments(databaseId, title, sourceType, bodyContent);
 
             McpToolResult result = await _mcpToolProvider.CallToolDirectAsync(
                 _createPageToolName, argumentsJson, cancellationToken);
@@ -62,6 +63,26 @@ public sealed class NotionFallbackStorage : IFallbackStorage
                 workflowName, databaseId);
             return false;
         }
+    }
+
+    private static string BuildTitle(string messageText)
+    {
+        string firstLine = messageText
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault() ?? messageText;
+
+        string trimmed = firstLine.Trim();
+
+        if (trimmed.Length <= _maxTitleLength)
+        {
+            return trimmed;
+        }
+
+        int cutoff = trimmed.LastIndexOf(' ', _maxTitleLength);
+
+        return cutoff > 0
+            ? $"{trimmed[..cutoff]}…"
+            : $"{trimmed[.._maxTitleLength]}…";
     }
 
     private static string FormatPageBody(string messageText, string senderName, string context) =>
