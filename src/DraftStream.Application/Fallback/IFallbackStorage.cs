@@ -4,7 +4,6 @@ public interface IFallbackStorage
 {
     Task<bool> SaveToWorkflowDatabaseAsync(
         string databaseId,
-        string title,
         string messageText,
         string senderName,
         string sourceType,

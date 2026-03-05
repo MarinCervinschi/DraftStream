@@ -34,7 +34,9 @@ public sealed class NotionMcpClient : IMcpToolProvider, IAsyncDisposable
     public async Task<IReadOnlyList<AITool>> GetToolsAsync(CancellationToken cancellationToken)
     {
         if (_cachedTools is not null)
+        {
             return _cachedTools;
+        }
 
         using Activity? activity = OpenTelemetryConfiguration.ActivitySource
             .StartActivity("McpListTools");
@@ -113,7 +115,9 @@ public sealed class NotionMcpClient : IMcpToolProvider, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
+        {
             return;
+        }
 
         _disposed = true;
 
@@ -139,13 +143,17 @@ public sealed class NotionMcpClient : IMcpToolProvider, IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (_client is not null)
+        {
             return _client;
+        }
 
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
             if (_client is not null)
+            {
                 return _client;
+            }
 
             _client = await CreateConnectionAsync(cancellationToken);
             return _client;
@@ -159,8 +167,10 @@ public sealed class NotionMcpClient : IMcpToolProvider, IAsyncDisposable
     private async Task<McpClient> CreateConnectionAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_settings.IntegrationToken))
+        {
             throw new InvalidOperationException(
                 "Notion IntegrationToken is not configured. Set 'Notion:IntegrationToken' in configuration or Infisical.");
+        }
 
         using Activity? activity = OpenTelemetryConfiguration.ActivitySource
             .StartActivity("McpConnect");

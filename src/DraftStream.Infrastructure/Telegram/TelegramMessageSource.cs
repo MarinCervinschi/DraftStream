@@ -59,7 +59,9 @@ public sealed class TelegramMessageSource : IMessageSource
         CancellationToken cancellationToken)
     {
         if (update.Message is not { Text: not null } message)
+        {
             return;
+        }
 
         if (message.Chat.Id != _settings.GroupId)
         {
@@ -136,7 +138,9 @@ public sealed class TelegramMessageSource : IMessageSource
     private string? ResolveWorkflowName(int? messageThreadId)
     {
         if (messageThreadId is null)
+        {
             return null;
+        }
 
         return _settings.TopicMappings.GetValueOrDefault(messageThreadId.Value);
     }

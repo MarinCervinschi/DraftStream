@@ -8,7 +8,7 @@ namespace DraftStream.Infrastructure.Notion;
 public sealed class NotionFallbackStorage : IFallbackStorage
 {
     private const string _createPageToolName = "API-post-page";
-    private const int _maxTitleLength = 100;
+    private const string _title = "Fallback Message";
 
     private readonly IMcpToolProvider _mcpToolProvider;
     private readonly ILogger<NotionFallbackStorage> _logger;
@@ -23,7 +23,6 @@ public sealed class NotionFallbackStorage : IFallbackStorage
 
     public async Task<bool> SaveToWorkflowDatabaseAsync(
         string databaseId,
-        string title,
         string messageText,
         string senderName,
         string sourceType,
@@ -36,10 +35,9 @@ public sealed class NotionFallbackStorage : IFallbackStorage
 
         try
         {
-            string truncatedTitle = TruncateTitle(title);
             string bodyContent = FormatPageBody(messageText, senderName, workflowName);
 
-            string argumentsJson = BuildCreatePageArguments(databaseId, truncatedTitle, sourceType, bodyContent);
+            string argumentsJson = BuildCreatePageArguments(databaseId, _title, sourceType, bodyContent);
 
             McpToolResult result = await _mcpToolProvider.CallToolDirectAsync(
                 _createPageToolName, argumentsJson, cancellationToken);
@@ -64,14 +62,6 @@ public sealed class NotionFallbackStorage : IFallbackStorage
                 workflowName, databaseId);
             return false;
         }
-    }
-
-    private static string TruncateTitle(string text)
-    {
-        string singleLine = text.ReplaceLineEndings(" ");
-        return singleLine.Length <= _maxTitleLength
-            ? singleLine
-            : string.Concat(singleLine.AsSpan(0, _maxTitleLength - 3), "...");
     }
 
     private static string FormatPageBody(string messageText, string senderName, string context) =>

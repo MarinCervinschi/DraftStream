@@ -27,7 +27,9 @@ public sealed class CachingAiFunction : DelegatingAIFunction
         string cacheKey = BuildCacheKey(arguments);
 
         if (_cache.TryGetValue(cacheKey, out object? cached))
+        {
             return cached;
+        }
 
         object? result = await base.InvokeCoreAsync(arguments, cancellationToken);
 

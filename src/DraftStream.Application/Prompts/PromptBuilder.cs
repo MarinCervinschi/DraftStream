@@ -53,7 +53,9 @@ public sealed class PromptBuilder
     private string LoadWorkflowInstructions(string workflowName)
     {
         if (_instructionCache.TryGetValue(workflowName, out string? cached))
+        {
             return cached;
+        }
 
         string resourceName = $"DraftStream.Application.Prompts.{workflowName}.md";
         Assembly assembly = typeof(PromptBuilder).Assembly;

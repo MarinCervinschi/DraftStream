@@ -67,7 +67,9 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
             var options = new ChatOptions { Tools = [.. wrappedTools] };
 
             if (!string.IsNullOrEmpty(_config.ModelOverride))
+            {
                 options.ModelId = _config.ModelOverride;
+            }
 
             ChatResponse response = await _chatClient.GetResponseAsync(messages, options, cancellationToken);
 
@@ -112,7 +114,6 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         bool saved = await _fallbackStorage.SaveToWorkflowDatabaseAsync(
             _config.DatabaseId,
             message.Text,
-            message.Text,
             message.SenderName,
             message.SourceType,
             message.WorkflowName,
@@ -130,9 +131,13 @@ public sealed class SchemaWorkflowHandler : IWorkflowHandler
         foreach (AITool tool in tools)
         {
             if (tool is AIFunction function && _cacheableToolNames.Contains(function.Name))
+            {
                 result.Add(new CachingAiFunction(function, _cache, _toolCacheDuration));
+            }
             else
+            {
                 result.Add(tool);
+            }
         }
 
         return result;
