@@ -87,11 +87,14 @@ public static class DependencyInjection
     {
         services.Configure<OpenRouterSettings>(configuration.GetSection(OpenRouterSettings.SectionName));
 
+        services.AddTransient<OpenRouterLoggingHandler>();
+
         services.AddHttpClient("OpenRouter", client =>
             {
                 client.DefaultRequestHeaders.Add("HTTP-Referer", "https://github.com/draftstream");
                 client.DefaultRequestHeaders.Add("X-Title", "DraftStream");
             })
+            .AddHttpMessageHandler<OpenRouterLoggingHandler>()
             .AddStandardResilienceHandler(options =>
             {
                 options.Retry.MaxRetryAttempts = 3;
