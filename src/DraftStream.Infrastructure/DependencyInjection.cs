@@ -119,12 +119,14 @@ public static class DependencyInjection
 
                 return openAiClient
                     .GetChatClient(settings.DefaultModel)
-                    .AsIChatClient();
-            })
-            .UseFunctionInvocation(loggerFactory: null, config =>
-            {
-                config.MaximumIterationsPerRequest = 10;
-                config.MaximumConsecutiveErrorsPerRequest = 3;
+                    .AsIChatClient()
+                    .AsBuilder()
+                    .UseFunctionInvocation(sp.GetRequiredService<ILoggerFactory>(), config =>
+                    {
+                        config.MaximumIterationsPerRequest = 10;
+                        config.MaximumConsecutiveErrorsPerRequest = 5;
+                    })
+                    .Build();
             });
     }
 
