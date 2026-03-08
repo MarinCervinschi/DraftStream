@@ -21,6 +21,8 @@ public static class OpenTelemetryConfiguration
             .ConfigureResource(resource => resource.AddService("DraftStream"))
             .WithTracing(tracing => tracing
                 .AddSource(ActivitySource.Name)
+                .AddSource("Microsoft.Extensions.AI")
+                .AddHttpClientInstrumentation()
                 .AddConsoleExporter()
                 .AddOtlpExporter(options =>
                 {
