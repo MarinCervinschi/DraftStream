@@ -3,44 +3,35 @@ using DraftStream.Application.Mcp;
 using DraftStream.Application.Messaging;
 using DraftStream.Application.Prompts;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace DraftStream.Application.Workflows;
 
 public sealed class WorkflowHandler : IWorkflowHandler
 {
-    private static readonly TimeSpan _toolCacheDuration = TimeSpan.FromMinutes(30);
-
-    private static readonly HashSet<string> _cacheableToolNames = new(StringComparer.Ordinal)
-    {
-        "API-retrieve-a-database",
-        "API-retrieve-a-data-source"
-    };
-
     private readonly IChatClient _chatClient;
     private readonly IMcpToolProvider _mcpToolProvider;
+    private readonly ISchemaProvider _schemaProvider;
     private readonly WorkflowConfig _config;
     private readonly PromptBuilder _promptBuilder;
     private readonly IFallbackStorage _fallbackStorage;
-    private readonly IMemoryCache _cache;
     private readonly ILogger<WorkflowHandler> _logger;
 
     public WorkflowHandler(
         IChatClient chatClient,
         IMcpToolProvider mcpToolProvider,
+        ISchemaProvider schemaProvider,
         WorkflowConfig config,
         PromptBuilder promptBuilder,
         IFallbackStorage fallbackStorage,
-        IMemoryCache cache,
         ILogger<WorkflowHandler> logger)
     {
         _chatClient = chatClient;
         _mcpToolProvider = mcpToolProvider;
+        _schemaProvider = schemaProvider;
         _config = config;
         _promptBuilder = promptBuilder;
         _fallbackStorage = fallbackStorage;
-        _cache = cache;
         _logger = logger;
     }
 
@@ -52,11 +43,14 @@ public sealed class WorkflowHandler : IWorkflowHandler
 
         try
         {
-            IReadOnlyList<AITool> tools = await _mcpToolProvider.GetToolsAsync(cancellationToken);
-            IList<AITool> wrappedTools = WrapCacheableTools(tools);
+            DatabaseSchema schema = await _schemaProvider.GetSchemaAsync(
+                _config.DatabaseId, cancellationToken);
 
             string systemPrompt = _promptBuilder.BuildSystemPrompt(
-                message.WorkflowName, _config.DatabaseId, message.SourceType);
+                message.WorkflowName, message.SourceType, schema);
+
+            IReadOnlyList<AITool> allTools = await _mcpToolProvider.GetToolsAsync(cancellationToken);
+            IList<AITool> tools = FilterToPostPageOnly(allTools);
 
             var messages = new List<ChatMessage>
             {
@@ -64,7 +58,7 @@ public sealed class WorkflowHandler : IWorkflowHandler
                 new(ChatRole.User, message.Text)
             };
 
-            var options = new ChatOptions { Tools = [.. wrappedTools] };
+            var options = new ChatOptions { Tools = [.. tools] };
 
             if (!string.IsNullOrEmpty(_config.ModelOverride))
             {
@@ -108,6 +102,13 @@ public sealed class WorkflowHandler : IWorkflowHandler
         }
     }
 
+    private static IList<AITool> FilterToPostPageOnly(IReadOnlyList<AITool> tools)
+    {
+        return tools
+            .Where(t => t is AIFunction { Name: "API-post-page" })
+            .ToList();
+    }
+
     private async Task<string> AttemptFallbackSaveAsync(
         IncomingMessage message, CancellationToken cancellationToken)
     {
@@ -122,24 +123,5 @@ public sealed class WorkflowHandler : IWorkflowHandler
         return saved
             ? "Processing failed, but your message was saved directly to the database."
             : "Sorry, I couldn't process your message and saving it failed too. Please try again.";
-    }
-
-    private IList<AITool> WrapCacheableTools(IReadOnlyList<AITool> tools)
-    {
-        var result = new List<AITool>(tools.Count);
-
-        foreach (AITool tool in tools)
-        {
-            if (tool is AIFunction function && _cacheableToolNames.Contains(function.Name))
-            {
-                result.Add(new CachingAiFunction(function, _cache, _toolCacheDuration));
-            }
-            else
-            {
-                result.Add(tool);
-            }
-        }
-
-        return result;
     }
 }

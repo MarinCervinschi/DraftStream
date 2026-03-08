@@ -12,7 +12,6 @@ using DraftStream.Infrastructure.Observability;
 using DraftStream.Infrastructure.OpenRouter;
 using DraftStream.Infrastructure.Telegram;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -75,10 +74,10 @@ public static class DependencyInjection
                 new WorkflowHandler(
                     sp.GetRequiredService<IChatClient>(),
                     sp.GetRequiredService<IMcpToolProvider>(),
+                    sp.GetRequiredService<ISchemaProvider>(),
                     config,
                     sp.GetRequiredService<PromptBuilder>(),
                     sp.GetRequiredService<IFallbackStorage>(),
-                    sp.GetRequiredService<IMemoryCache>(),
                     sp.GetRequiredService<ILogger<WorkflowHandler>>()));
         }
     }
@@ -137,5 +136,6 @@ public static class DependencyInjection
     {
         services.Configure<NotionSettings>(configuration.GetSection(NotionSettings.SectionName));
         services.AddSingleton<IMcpToolProvider, NotionMcpClient>();
+        services.AddSingleton<ISchemaProvider, NotionSchemaProvider>();
     }
 }
