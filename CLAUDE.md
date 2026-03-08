@@ -30,7 +30,7 @@ DraftStream is a .NET 9 AI agent that captures notes, tasks, and code snippets f
 src/DraftStream.Domain              — enums, value objects (no dependencies)
 src/DraftStream.Application         — interfaces, shared contracts, workflows, prompts (→ Domain)
   Fallback/                         — IFallbackStorage
-  Mcp/                              — IMcpToolProvider, ISchemaProvider, McpToolResult, DatabaseSchema, CachingAiFunction
+  Mcp/                              — IMcpToolProvider, ISchemaProvider, McpToolResult, DatabaseSchema
   Messaging/                        — IMessageSource, IMessageDispatcher, IncomingMessage
   Workflows/                        — WorkflowHandler, WorkflowSettings, WorkflowConfig
   Prompts/                          — PromptBuilder, notes.md, tasks.md, snippets.md (embedded resources)
