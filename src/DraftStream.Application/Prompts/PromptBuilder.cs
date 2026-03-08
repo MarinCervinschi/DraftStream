@@ -9,52 +9,35 @@ namespace DraftStream.Application.Prompts;
 public sealed class PromptBuilder
 {
     private const string _baseTemplate = """
-                                         You are processing a message for the "{0}" workflow.
-                                         Source: {1}
+                                         # DraftStream — {1} assistant
 
-                                         DATA_SOURCE_ID: {2} — use this EXACT value in parent.data_source_id. Do NOT use any other ID.
-                                         TODAY: {3}
+                                         {0}
 
-                                         ## Database Schema
+                                         ## Context
+                                         - Workflow: "{1}" | Source: {2} | Today: {3}
+
+                                         ## Database
+
+                                         DATA_SOURCE_ID: {4} — use this EXACT value in parent.data_source_id.
 
                                          Properties:
-                                         {4}
-
-                                         ## Property JSON Formats
-
-                                         title → {{ "title": [{{ "text": {{ "content": "..." }} }}] }}
-                                         rich_text → {{ "rich_text": [{{ "text": {{ "content": "..." }} }}] }}
-                                         select → {{ "select": {{ "name": "..." }} }}
-                                         multi_select → {{ "multi_select": [{{ "name": "..." }}] }}
-                                         date → {{ "date": {{ "start": "YYYY-MM-DD" }} }}
-                                         checkbox → {{ "checkbox": true }}
-                                         status → {{ "status": {{ "name": "..." }} }}
-                                         number → {{ "number": 42 }}
-                                         url → {{ "url": "https://..." }}
-                                         email → {{ "email": "..." }}
-                                         phone_number → {{ "phone_number": "..." }}
+                                         {5}
 
                                          ## Example
 
-                                         User message: "Buy groceries for the weekend"
+                                         Input: "Buy groceries for the weekend"
 
-                                         Call API-post-page with:
-                                         {5}
-
-                                         Reply: "Saved to {0}."
-
-                                         ## Workflow Instructions
-
+                                         → Call API-post-page:
                                          {6}
 
-                                         ## Rules
+                                         → Reply: "Saved to {1}."
 
-                                         - Call API-post-page ONCE with parent.data_source_id = "{2}"
-                                         - Use EXACT property names from the schema (case-sensitive)
-                                         - Reply with 1-2 sentence confirmation
-                                         - Skip system-managed properties (created_time, last_edited_time, created_by, last_edited_by, formula, rollup)
-                                         - Leave unknown values empty rather than guessing
-                                         - Max 2000 characters per text field, max 100 items in arrays
+                                         ## Rules
+                                         1. Call API-post-page with EXACT property names (case-sensitive)
+                                         2. Format content body in Markdown (headings, bullets, code blocks)
+                                         3. Skip system-managed properties
+                                         4. Leave unknown values empty — do NOT guess
+                                         5. Reply with 1-2 sentence confirmation after saving
                                          """;
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
@@ -76,15 +59,9 @@ public sealed class PromptBuilder
         string example = GenerateFewShotExample(schema);
         string today = DateTime.UtcNow.ToString("yyyy-MM-dd");
 
-        return string.Format(
-            _baseTemplate,
-            workflowName,
-            sourceType,
-            schema.DataSourceId,
-            today,
-            schemaSection,
-            example,
-            instructions);
+        return string.Format(_baseTemplate,
+            instructions, workflowName, sourceType, today, schema.DataSourceId, schemaSection, example
+        );
     }
 
     private static string FormatSchemaForPrompt(DatabaseSchema schema)
