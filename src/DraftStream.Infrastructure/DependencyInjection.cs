@@ -28,7 +28,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddMemoryCache();
-        services.AddDraftStreamOpenTelemetry();
+        services.AddDraftStreamOpenTelemetry(configuration);
         services.AddFallbackStorage();
         services.AddWorkflowHandlers(configuration);
         services.AddMessaging(configuration);
