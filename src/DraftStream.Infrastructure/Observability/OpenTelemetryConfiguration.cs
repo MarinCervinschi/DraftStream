@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -15,7 +16,12 @@ public static class OpenTelemetryConfiguration
             .ConfigureResource(resource => resource.AddService("DraftStream"))
             .WithTracing(tracing => tracing
                 .AddSource(ActivitySource.Name)
-                .AddConsoleExporter());
+                .AddConsoleExporter()
+                .AddOtlpExporter(options =>
+                {
+                    options.Endpoint = new Uri("http://localhost:5341/ingest/otlp/v1/traces");
+                    options.Protocol = OtlpExportProtocol.HttpProtobuf;
+                }));
 
         return services;
     }
