@@ -15,7 +15,7 @@ public static class OpenTelemetryConfiguration
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        string seqUrl = configuration["Seq:ServerUrl"] ?? "http://localhost:5341";
+        string seqUrl = configuration["Serilog:WriteTo:1:Args:serverUrl"] ?? "http://localhost:5341";
 
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService("DraftStream"))

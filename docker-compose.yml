@@ -7,7 +7,6 @@ services:
     env_file:
       - .env
     environment:
-      - Seq__ServerUrl=http://seq:80
       - Serilog__WriteTo__1__Args__serverUrl=http://seq:80
 
   seq:
