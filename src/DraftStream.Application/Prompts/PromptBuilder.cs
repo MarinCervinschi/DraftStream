@@ -13,6 +13,9 @@ public sealed class PromptBuilder
 
                                          {0}
 
+                                         You have only ONE task: take the CONTENT of the user's message and
+                                         SAVE it in a new page by calling the API-post-page tool.
+
                                          ## Context
                                          - Workflow: "{1}" | Source: {2} | Today: {3}
 
@@ -37,7 +40,6 @@ public sealed class PromptBuilder
                                          2. Format content body in Markdown (headings, bullets, code blocks)
                                          3. Skip system-managed properties
                                          4. Leave unknown values empty — do NOT guess
-                                         5. Reply with 1-2 sentence confirmation after saving
                                          """;
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
